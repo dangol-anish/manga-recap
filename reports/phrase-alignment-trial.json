@@ -1,0 +1,42 @@
+{
+  "chapter": "Chapter 1",
+  "beat": 6,
+  "script_unchanged": true,
+  "whole_chapter_unchanged": true,
+  "voice": "en-US-AndrewMultilingualNeural",
+  "duration": 9.814,
+  "word_count": 35,
+  "anchors": [
+    {
+      "panel_id": "p006-1",
+      "phrase": "Suddenly a truck comes roaring toward the group,",
+      "char_start": 0,
+      "char_end": 48,
+      "start": 0.0,
+      "end": 2.71
+    },
+    {
+      "panel_id": "p006-2",
+      "phrase": "and the driver has dozed off at the wheel.",
+      "char_start": 49,
+      "char_end": 91,
+      "start": 2.71,
+      "end": 4.6525
+    },
+    {
+      "panel_id": "p006-6",
+      "phrase": "Without hesitating, he rushes in. He pushes the others out of its path and takes the hit himself.",
+      "char_start": 92,
+      "char_end": 189,
+      "start": 4.6525,
+      "end": 9.814
+    }
+  ],
+  "equal_switches": [
+    3.271333333333333,
+    6.542666666666666
+  ],
+  "removed_silence_seconds": 1.8499999999999996,
+  "full_decode": "passed",
+  "tests_passed": 47
+}

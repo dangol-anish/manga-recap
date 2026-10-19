@@ -1,0 +1,75 @@
+{
+  "chapter": "Chapter 1",
+  "beats": 30,
+  "panels": 116,
+  "duration": 337.788,
+  "visual_style": {
+    "version": 1,
+    "blur": 28,
+    "brightness": 0.48,
+    "foreground_scale": 0.92,
+    "shadow_blur": 24,
+    "shadow_alpha": 190,
+    "shadow_y": 14,
+    "edge_alpha": 60
+  },
+  "script_unchanged": true,
+  "source_audio_files_unchanged": true,
+  "decoded_mp4_audio_identical": true,
+  "timing_unchanged": true,
+  "pacing": {
+    "rate": "+20%",
+    "speed": 1.2,
+    "sentence_pause": 0.18
+  },
+  "previews_restyled": 30,
+  "tests": 59,
+  "full_decode": "passed",
+  "previous_video_retained": true,
+  "render_token": "e0ef615ac37676a753c5293034c52015a318024964e9e5e358fa2c4692d34f9c",
+  "file": "/Users/anishdangol/Desktop/manga-recap/outputs/b2c4e9dc358847c6b8faeb3fc3dc0cc8/Chapter 1/stage5/chapter-1-e0ef615ac37676a753c5293034c52015a318024964e9e5e358fa2c4692d34f9c.mp4",
+  "sampled_export_frames": [
+    {
+      "beat": 1,
+      "panel_id": "p001-1",
+      "pixel_mean_absolute_error": 1.511
+    },
+    {
+      "beat": 6,
+      "panel_id": "p006-2",
+      "pixel_mean_absolute_error": 0.844
+    },
+    {
+      "beat": 20,
+      "panel_id": "p022-1",
+      "pixel_mean_absolute_error": 1.225
+    },
+    {
+      "beat": 30,
+      "panel_id": "p037-1",
+      "pixel_mean_absolute_error": 0.807
+    }
+  ],
+  "probe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1280,
+        "height": 720,
+        "duration": "337.791667"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "duration": "337.788000"
+      }
+    ],
+    "format": {
+      "duration": "337.791667",
+      "size": "20871417"
+    }
+  }
+}

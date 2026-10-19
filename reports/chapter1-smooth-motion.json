@@ -1,0 +1,124 @@
+{
+  "chapter": "Chapter 1",
+  "beats": 30,
+  "panels": 116,
+  "frames": 8107,
+  "duration": 337.788,
+  "visual_style": {
+    "version": 1,
+    "blur": 28,
+    "brightness": 0.48,
+    "foreground_scale": 0.92,
+    "shadow_blur": 24,
+    "shadow_alpha": 190,
+    "shadow_y": 14,
+    "edge_alpha": 60
+  },
+  "motion_style": {
+    "version": 3,
+    "cycle": [
+      "zoom_in",
+      "zoom_out",
+      "slide_from_left",
+      "slide_from_right"
+    ],
+    "zoom_max": 0.04,
+    "zoom_per_second": 0.006,
+    "slide_max": 0.025,
+    "slide_per_second": 0.004,
+    "sampling": "fractional_affine_cubic"
+  },
+  "script_unchanged": true,
+  "source_audio_files_unchanged": true,
+  "decoded_mp4_audio_identical": true,
+  "timing_unchanged": true,
+  "pacing": {
+    "rate": "+20%",
+    "speed": 1.2,
+    "sentence_pause": 0.18
+  },
+  "previews_restyled": 30,
+  "tests": 65,
+  "full_decode": "passed",
+  "previous_video_retained": true,
+  "render_token": "3631542609004ad3604873728a013a0fceae14f60516a51ef1c291b65b4df4c9",
+  "file": "/Users/anishdangol/Desktop/manga-recap/outputs/b2c4e9dc358847c6b8faeb3fc3dc0cc8/Chapter 1/stage5/chapter-1-3631542609004ad3604873728a013a0fceae14f60516a51ef1c291b65b4df4c9.mp4",
+  "sampled_motions": [
+    {
+      "kind": "zoom_in",
+      "panel_id": "p001-1",
+      "frames": 178,
+      "amount": 0.04,
+      "pixel_motion_difference": 22.168
+    },
+    {
+      "kind": "zoom_out",
+      "panel_id": "p003-2",
+      "frames": 67,
+      "amount": 0.01687499999999999,
+      "pixel_motion_difference": 17.554
+    },
+    {
+      "kind": "slide_from_left",
+      "panel_id": "p003-3",
+      "frames": 62,
+      "amount": 0.010280000000000001,
+      "pixel_motion_difference": 29.009
+    },
+    {
+      "kind": "slide_from_right",
+      "panel_id": "p002-1",
+      "frames": 153,
+      "amount": 0.025,
+      "pixel_motion_difference": 19.995
+    }
+  ],
+  "probe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1280,
+        "height": 720,
+        "duration": "337.791667",
+        "nb_frames": "8107"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "duration": "337.788000",
+        "nb_frames": "7918"
+      }
+    ],
+    "format": {
+      "duration": "337.791667",
+      "size": "82987535"
+    }
+  },
+  "jittery_video_retained": "/Users/anishdangol/Desktop/manga-recap/outputs/b2c4e9dc358847c6b8faeb3fc3dc0cc8/Chapter 1/stage5/chapter-1-244d1c0f089339dda74d278bac2b75e8a0f6a918ce3bf1d8dd6f655abeeaf873.mp4",
+  "temporal_regression": "65 tests passed, including all-frame edge tracking for all four directions",
+  "jitter_comparison": [
+    {
+      "kind": "zoom_in",
+      "rms_edge_error_pixels": 0.23988396092721087,
+      "largest_step_pixels": 0.54097498246432
+    },
+    {
+      "kind": "zoom_out",
+      "rms_edge_error_pixels": 0.12589849531735708,
+      "largest_step_pixels": 0.3112311872271789
+    },
+    {
+      "kind": "slide_from_left",
+      "rms_edge_error_pixels": 0.12956125201070473,
+      "largest_step_pixels": 0.5488660275894404
+    },
+    {
+      "kind": "slide_from_right",
+      "rms_edge_error_pixels": 0.20426425679663385,
+      "largest_step_pixels": 0.4343506493506766
+    }
+  ]
+}

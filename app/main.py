@@ -445,6 +445,15 @@ def video_export(manga_id: str, chapter_name: str, body: VideoExport):
         raise review_error(exc)
 
 
+@app.get('/api/video/{manga_id}/{chapter_name}/frame')
+def video_frame(manga_id: str, chapter_name: str, panel_id: str, revision: str, style: str):
+    try:
+        path = video.frame_asset(manga_id,chapter_name,panel_id,revision,style)
+    except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:
+        raise review_error(exc)
+    return FileResponse(path,media_type='image/png',headers={'Cache-Control':'private, max-age=31536000, immutable'})
+
+
 @app.get('/api/video/{manga_id}/{chapter_name}/mp4')
 def video_mp4(manga_id: str, chapter_name: str, token: str, download: bool = False):
     try:
@@ -453,3 +462,76 @@ def video_mp4(manga_id: str, chapter_name: str, token: str, download: bool = Fal
         raise review_error(exc)
     return FileResponse(path, media_type='video/mp4', filename='Chapter-1.mp4' if download else None,
                         headers={'Cache-Control':'no-store'})
+
+
+from app import alignment
+
+
+@app.get('/api/alignment/{manga_id}/{chapter_name}/{number}')
+def alignment_status(manga_id: str, chapter_name: str, number: int):
+    try:
+        return alignment.status(manga_id,chapter_name,number)
+    except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:
+        raise review_error(exc)
+
+
+@app.get('/api/alignment/{manga_id}/{chapter_name}/{number}/prompt')
+def alignment_prompt(manga_id: str, chapter_name: str, number: int):
+    from fastapi.responses import Response
+    try:
+        text=alignment.prompt_text(manga_id,chapter_name,number)
+    except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:
+        raise review_error(exc)
+    return Response(text,media_type='text/markdown',headers={'Content-Disposition':f'attachment; filename="beat-{number:03}-alignment-prompt.md"','Cache-Control':'no-store'})
+
+
+class PhraseMapInput(BaseModel):
+    source_token: str = Field(min_length=64,max_length=64)
+    reply: str = Field(min_length=1,max_length=200_000)
+
+
+@app.post('/api/alignment/{manga_id}/{chapter_name}/{number}/map')
+def alignment_map(manga_id: str, chapter_name: str, number: int, body: PhraseMapInput):
+    try:
+        result=alignment.save_map(manga_id,chapter_name,number,body.source_token,body.reply)
+    except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:
+        raise review_error(exc)
+    return JSONResponse(result,status_code=200 if result['ok'] else 422)
+
+
+class AlignmentTrialInput(BaseModel):
+    source_token: str = Field(min_length=64,max_length=64)
+
+
+@app.post('/api/alignment/{manga_id}/{chapter_name}/{number}/trial')
+def alignment_trial(manga_id: str, chapter_name: str, number: int, body: AlignmentTrialInput):
+    try:
+        return alignment.start(manga_id,chapter_name,number,body.source_token)
+    except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:
+        raise review_error(exc)
+
+
+@app.get('/api/alignment/{manga_id}/{chapter_name}/{number}/trial/{revision}/{kind}')
+def alignment_trial_asset(manga_id: str, chapter_name: str, number: int, revision: str, kind: str):
+    try:
+        path=alignment.asset(manga_id,chapter_name,number,revision,kind)
+    except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:
+        raise review_error(exc)
+    return FileResponse(path,media_type='video/mp4' if kind=='mp4' else 'audio/mpeg',headers={'Cache-Control':'no-store'})
+
+
+@app.get('/alignment-examples/{manga_id}/{chapter_name}')
+def alignment_examples_page(manga_id: str, chapter_name: str):
+    try:
+        narration.context(manga_id,chapter_name)
+    except (PermissionError,FileNotFoundError,ValueError) as exc:
+        raise review_error(exc)
+    return FileResponse(ROOT / 'app/static/alignment_examples.html')
+
+
+@app.get('/api/alignment-examples/{manga_id}/{chapter_name}')
+def alignment_examples_status(manga_id: str, chapter_name: str):
+    try:
+        return {'chapter':chapter_name,'examples':[alignment.status(manga_id,chapter_name,n) for n in alignment.TRIAL_BEATS]}
+    except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:
+        raise review_error(exc)

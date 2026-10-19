@@ -12,7 +12,7 @@ from pathlib import Path
 from app import narration, storage
 
 VOICE = 'en-US-AndrewMultilingualNeural'
-# Keep the voice's delivery speed; shorten actual quiet gaps instead of changing text.
+# Base trimming profile; approved per-chapter speed/period pauses live in pacing.json.
 PAUSE_PROFILE = 'pcm-rms-v1:threshold=-45dB:min-gap=0.20:keep=0.10:window=0.01'
 lock = threading.RLock()
 jobs = {}
@@ -20,6 +20,10 @@ jobs = {}
 
 def root(manga_id):
     return narration.root(manga_id) / 'audio'
+
+
+def pacing(manga_id):
+    return storage.read_json(root(manga_id) / 'pacing.json', {})
 
 
 def manifest(manga_id):
@@ -52,20 +56,21 @@ def status(manga_id, chapter):
     with lock:
         current = beats(manga_id, chapter)
         saved = manifest(manga_id)['clips']
+        settings = pacing(manga_id)
         job = jobs.get(manga_id, {'running': False, 'message': 'Ready to generate Chapter 1 audio.'})
         for beat in current:
             clip = saved.get(beat['token'], {})
             beat['silent'] = not beat['narration'].strip()
-            beat['ready'] = not beat['silent'] and clip_path(manga_id, clip) is not None
+            beat['ready'] = not beat['silent'] and clip_path(manga_id, clip) is not None and clip.get('pacing', {}) == settings
             beat['duration'] = clip.get('duration') if beat['ready'] else None
             beat['revision'] = clip.get('file') if beat['ready'] else None
-        return {'chapter': chapter, 'voice': VOICE, 'beats': current,
+        return {'chapter': chapter, 'voice': VOICE, 'pacing': settings, 'beats': current,
                 'ready': sum(b['ready'] for b in current),
                 'spoken': sum(not b['silent'] for b in current), 'job': dict(job)}
 
 
-def shorten_pauses(target):
-    """Shorten quiet runs, retaining 50 ms at each edge; never accelerate speech."""
+def shorten_pauses(target, sentence_boundaries=None, sentence_pause=.18):
+    """Trim measured quiet runs; optionally retain or insert a brief period pause."""
     import numpy as np
     executable = shutil.which('ffmpeg')
     if not executable:
@@ -87,14 +92,36 @@ def shorten_pauses(target):
         boundaries = np.diff(np.r_[False, quiet, False].astype(np.int8))
         starts = np.where(boundaries == 1)[0]*window
         ends = np.where(boundaries == -1)[0]*window
+        # Select the longest measured quiet run after each sentence's last word.
+        # Speech metadata durations can include trailing silence; use word starts.
+        sentence_runs = set()
+        for boundary in sentence_boundaries or []:
+            candidates = [(int(b-a), i) for i, (a,b) in enumerate(zip(starts,ends))
+                          if a/24000 >= boundary['start']-.02 and b/24000 <= boundary['end']+.08]
+            if not candidates:
+                raise ValueError('No safe quiet gap found after a period; previous audio retained.')
+            sentence_runs.add(max(candidates)[1])
         pieces = []
+        removed = []
         cursor = 0
-        for start, end in zip(starts, ends):
-            if end-start < 4800:  # Preserve gaps shorter than 200 ms.
+        for i, (start, end) in enumerate(zip(starts, ends)):
+            length = int(end-start)
+            if i in sentence_runs:
+                keep = round(sentence_pause*24000)
+                if length < keep:
+                    middle = int((start+end)//2)
+                    pieces.extend([samples[cursor:middle], np.zeros(keep-length, dtype='<i2')])
+                    removed.append({'start':middle/24000, 'end':middle/24000, 'added':(keep-length)/24000})
+                    cursor = middle
+                    continue
+            elif length >= 4800:
+                keep = 2400  # Other long gaps still keep 100 ms.
+            else:
                 continue
-            # Retain both quiet edges so joins do not cut into neighboring words.
-            pieces.append(samples[cursor:start+1200])
-            cursor = end-1200
+            left = keep//2; right = keep-left
+            pieces.append(samples[cursor:start+left])
+            removed.append({'start':(int(start)+left)/24000, 'end':(int(end)-right)/24000})
+            cursor = end-right
         pieces.append(samples[cursor:])
         pcm = np.concatenate(pieces).astype('<i2', copy=False).tobytes()
         encoded = subprocess.run([executable, '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
@@ -107,6 +134,7 @@ def shorten_pauses(target):
         if MP3(processed).info.length <= 0:
             raise ValueError('Pause processing produced empty audio.')
         processed.replace(target)
+        return removed
     finally:
         processed.unlink(missing_ok=True)
 
@@ -126,17 +154,24 @@ def generate_one(manga_id, chapter, beat):
     target = directory / (revision + '.mp3')
     started = time.monotonic()
     try:
-        asyncio.run(synthesize(beat['narration'], temporary))
+        settings = pacing(manga_id)
+        if settings:
+            from app import alignment
+            alignment.speech(beat['narration'], temporary, settings)
+        else:
+            asyncio.run(synthesize(beat['narration'], temporary))
         info = MP3(temporary).info
         if info.length <= 0:
             raise ValueError('The speech service returned empty audio.')
         with lock:
+            if pacing(manga_id) != settings:
+                raise FileExistsError('Speech pacing changed during generation. Retry this beat.')
             current = beats(manga_id, chapter)
             if not any(b['token'] == beat['token'] for b in current):
                 raise FileExistsError('Narration changed during generation. Generate audio again for the current beats.')
             temporary.replace(target)
             saved = manifest(manga_id)
-            saved['clips'][beat['token']] = {'file': target.name, 'duration': info.length, 'voice': VOICE, 'pause_filter': PAUSE_PROFILE}
+            saved['clips'][beat['token']] = {'file': target.name, 'duration': info.length, 'voice': VOICE, 'pause_filter': PAUSE_PROFILE, 'pacing': settings}
             storage.write_json(directory / 'audio.json', saved)
         print(f'Audio beat {beat["number"]}: {info.length:.1f}s audio, {time.monotonic()-started:.1f}s generation', flush=True)
     finally:
@@ -150,7 +185,7 @@ def run(manga_id, chapter, selected, regenerate):
             with lock:
                 jobs[manga_id].update(message=f'Generating beat {beat["number"]} ({index}/{len(selected)})…')
                 existing = manifest(manga_id)['clips'].get(beat['token'], {})
-            if regenerate or clip_path(manga_id, existing) is None:
+            if regenerate or clip_path(manga_id, existing) is None or existing.get('pacing', {}) != pacing(manga_id):
                 generate_one(manga_id, chapter, beat)
             with lock:
                 jobs[manga_id]['completed'] = index

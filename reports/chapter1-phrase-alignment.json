@@ -1,0 +1,338 @@
+{
+  "chapter": "Chapter 1",
+  "beats": 30,
+  "panels": 116,
+  "duration": 390.162,
+  "voice": "en-US-AndrewMultilingualNeural",
+  "pause_profile": "pcm-rms-v1:threshold=-45dB:min-gap=0.20:keep=0.10:window=0.01",
+  "render_token": "d64c73ec54caea4b530fa09d064e2272fc266d7b7a598b719d6d0363bd643eff",
+  "file": "/Users/anishdangol/Desktop/manga-recap/outputs/b2c4e9dc358847c6b8faeb3fc3dc0cc8/Chapter 1/stage5/chapter-1-d64c73ec54caea4b530fa09d064e2272fc266d7b7a598b719d6d0363bd643eff.mp4",
+  "script_unchanged": true,
+  "notes": [
+    "Beat 20 narration places the reaction after the blast; original script and panel order preserved."
+  ],
+  "tests": 50,
+  "full_decode": "passed",
+  "previous_video_retained": true,
+  "word_aligned_switches": 86,
+  "beats_detail": [
+    {
+      "beat": 1,
+      "panels": 3,
+      "seconds": 12.072,
+      "switches": [
+        8.572500000000002,
+        10.310000000000002
+      ]
+    },
+    {
+      "beat": 2,
+      "panels": 5,
+      "seconds": 17.122,
+      "switches": [
+        7.165,
+        10.3575,
+        11.46,
+        12.962500000000002
+      ]
+    },
+    {
+      "beat": 3,
+      "panels": 5,
+      "seconds": 16.042,
+      "switches": [
+        3.4875,
+        6.76,
+        9.75,
+        11.6725
+      ]
+    },
+    {
+      "beat": 4,
+      "panels": 3,
+      "seconds": 16.17,
+      "switches": [
+        3.5074999999999994,
+        11.564999999999998
+      ]
+    },
+    {
+      "beat": 5,
+      "panels": 4,
+      "seconds": 16.462,
+      "switches": [
+        3.175,
+        6.15,
+        8.82
+      ]
+    },
+    {
+      "beat": 6,
+      "panels": 3,
+      "seconds": 9.814,
+      "switches": [
+        2.71,
+        4.6525
+      ]
+    },
+    {
+      "beat": 7,
+      "panels": 2,
+      "seconds": 9.402,
+      "switches": [
+        4.5525
+      ]
+    },
+    {
+      "beat": 8,
+      "panels": 3,
+      "seconds": 16.298,
+      "switches": [
+        4.4175,
+        9.9875
+      ]
+    },
+    {
+      "beat": 9,
+      "panels": 3,
+      "seconds": 8.93,
+      "switches": [
+        2.1374999999999997,
+        6.9
+      ]
+    },
+    {
+      "beat": 10,
+      "panels": 2,
+      "seconds": 13.778,
+      "switches": [
+        7.0649999999999995
+      ]
+    },
+    {
+      "beat": 11,
+      "panels": 5,
+      "seconds": 14.804,
+      "switches": [
+        2.4450000000000003,
+        3.5549999999999997,
+        7.61,
+        10.962500000000002
+      ]
+    },
+    {
+      "beat": 12,
+      "panels": 5,
+      "seconds": 18.034,
+      "switches": [
+        5.845000000000001,
+        11.334999999999999,
+        15.254999999999999,
+        16.4775
+      ]
+    },
+    {
+      "beat": 13,
+      "panels": 3,
+      "seconds": 12.148,
+      "switches": [
+        3.3050000000000006,
+        6.322500000000001
+      ]
+    },
+    {
+      "beat": 14,
+      "panels": 2,
+      "seconds": 6.582,
+      "switches": [
+        2.4325
+      ]
+    },
+    {
+      "beat": 15,
+      "panels": 5,
+      "seconds": 16.238,
+      "switches": [
+        0.6775,
+        2.3650000000000007,
+        10.927500000000002,
+        14.685000000000002
+      ]
+    },
+    {
+      "beat": 16,
+      "panels": 3,
+      "seconds": 10.512,
+      "switches": [
+        4.672499999999999,
+        6.715
+      ]
+    },
+    {
+      "beat": 17,
+      "panels": 5,
+      "seconds": 9.54,
+      "switches": [
+        0.6175,
+        2.9299999999999997,
+        4.467499999999999,
+        5.555
+      ]
+    },
+    {
+      "beat": 18,
+      "panels": 4,
+      "seconds": 12.22,
+      "switches": [
+        2.59,
+        3.6424999999999996,
+        7.699999999999999
+      ]
+    },
+    {
+      "beat": 19,
+      "panels": 3,
+      "seconds": 12.584,
+      "switches": [
+        5.6225000000000005,
+        6.882499999999999
+      ]
+    },
+    {
+      "beat": 20,
+      "panels": 4,
+      "seconds": 12.276,
+      "switches": [
+        1.3875,
+        2.2674999999999996,
+        6.6525
+      ]
+    },
+    {
+      "beat": 21,
+      "panels": 6,
+      "seconds": 13.906,
+      "switches": [
+        2.7849999999999997,
+        5.25,
+        6.245000000000001,
+        10.540000000000001,
+        12.620000000000001
+      ]
+    },
+    {
+      "beat": 22,
+      "panels": 3,
+      "seconds": 10.894,
+      "switches": [
+        1.8075000000000003,
+        5.325
+      ]
+    },
+    {
+      "beat": 23,
+      "panels": 5,
+      "seconds": 15.828,
+      "switches": [
+        5.779999999999999,
+        7.5024999999999995,
+        9.272499999999999,
+        12.222499999999998
+      ]
+    },
+    {
+      "beat": 24,
+      "panels": 5,
+      "seconds": 14.71,
+      "switches": [
+        4.327499999999999,
+        6.892499999999998,
+        9.082499999999998,
+        12.622499999999999
+      ]
+    },
+    {
+      "beat": 25,
+      "panels": 3,
+      "seconds": 11.146,
+      "switches": [
+        5.352500000000001,
+        7.24
+      ]
+    },
+    {
+      "beat": 26,
+      "panels": 5,
+      "seconds": 17.178,
+      "switches": [
+        2.9175,
+        7.197500000000002,
+        12.570000000000002,
+        13.832500000000001
+      ]
+    },
+    {
+      "beat": 27,
+      "panels": 4,
+      "seconds": 15.312,
+      "switches": [
+        5.36,
+        7.795,
+        13.244999999999997
+      ]
+    },
+    {
+      "beat": 28,
+      "panels": 5,
+      "seconds": 9.678,
+      "switches": [
+        1.4,
+        2.62,
+        4.050000000000001,
+        8.51
+      ]
+    },
+    {
+      "beat": 29,
+      "panels": 5,
+      "seconds": 13.694,
+      "switches": [
+        5.5675,
+        7.322499999999999,
+        9.1725,
+        11.737499999999997
+      ]
+    },
+    {
+      "beat": 30,
+      "panels": 3,
+      "seconds": 6.788,
+      "switches": [
+        3.9400000000000004,
+        4.9725
+      ]
+    }
+  ],
+  "probe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1280,
+        "height": 720,
+        "duration": "390.166667"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "duration": "390.162000"
+      }
+    ],
+    "format": {
+      "duration": "390.166667",
+      "size": "22150798"
+    }
+  }
+}
