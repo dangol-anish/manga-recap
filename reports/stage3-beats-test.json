@@ -1,0 +1,17 @@
+{
+  "batch": "batch-001",
+  "manifest_panels": 80,
+  "kind": "Controlled structural tests, not AI-generated manga narration.",
+  "checks": {
+    "selected_beats_and_skips": true,
+    "unknown_id_rejected_without_commit": true,
+    "targeted_beat_correction": true,
+    "repeated_id_rejected": true,
+    "out_of_order_rejected": true,
+    "manifest_and_no_default_closing": true
+  },
+  "selected_panels": 6,
+  "skipped_panels": 74,
+  "beats": 3,
+  "real_narration_modified": false
+}

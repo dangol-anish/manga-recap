@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library · Manga Recap</title><link rel="stylesheet" href="/static/style.css">
+<script src="/static/library.js" defer></script>
+</head>
+<body>
+<main>
+<header><div class="mark">M<span>R</span></div><div><p class="eyebrow">MANGA RECAP / STAGE 01</p><h1>Library</h1></div><span class="local">● Local · 127.0.0.1</span></header>
+<section class="intro"><h2>Your chapters, in order.</h2><p>Add a manga folder, choose its reading direction, then test one chapter. Magi v3 detects panels locally and saves their reading order.</p></section>
+<section class="add"><form id="add-form"><div class="field"><label for="folder">Manga folder</label><input id="folder" name="folder" placeholder="manga/MyManga" required><small>Inside this repo, with one folder per chapter and numbered page images.</small></div><div class="field direction"><label for="direction">Reading direction</label><select id="direction" name="direction"><option value="rtl">Right to left ←</option><option value="ltr">Left to right →</option></select></div><button type="submit">Add manga <span>＋</span></button></form></section>
+<p id="model-status" role="status"></p>
+<p id="notice" role="status" aria-live="polite"></p>
+<section id="library" aria-label="Manga library"><div class="empty"><h2>Your Library is empty</h2><p>Add a folder above to get started.</p></div></section>
+<footer><span>MAGI V3 · PANELS ONLY</span><span>Completed pages are saved. Resume skips existing JSONs.</span></footer>
+</main>
+</body></html>

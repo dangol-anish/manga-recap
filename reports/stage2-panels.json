@@ -1,0 +1,53 @@
+{
+  "chapters": [
+    {
+      "chapter": "Chapter 1",
+      "reading_direction": "rtl",
+      "pages": 37,
+      "panels": 150,
+      "flagged": [
+        {
+          "page": "002.png",
+          "reasons": [
+            "Panels 5 and 6 overlap: 92.0% of page width, 6.5% of page height (over 5% in both dimensions)."
+          ]
+        },
+        {
+          "page": "007.png",
+          "reasons": [
+            "Panel 3 covers 99.2% of the page while other boxes exist (at least 90%).",
+            "Panels 1 and 3 overlap: 96.0% of page width, 24.1% of page height (over 5% in both dimensions).",
+            "Panels 2 and 3 overlap: 69.9% of page width, 15.5% of page height (over 5% in both dimensions)."
+          ]
+        },
+        {
+          "page": "020.png",
+          "reasons": [
+            "Panel 6 width is 8.0% of the page (under 10%).",
+            "Panel 6 area is 2.2% of the page (under 3%)."
+          ]
+        },
+        {
+          "page": "022.png",
+          "reasons": [
+            "Spread: width 2133px is greater than height 1520px."
+          ]
+        },
+        {
+          "page": "023.png",
+          "reasons": [
+            "Panels 1 and 2 overlap: 91.1% of page width, 8.3% of page height (over 5% in both dimensions).",
+            "Panels 2 and 3 overlap: 91.0% of page width, 5.9% of page height (over 5% in both dimensions)."
+          ]
+        }
+      ]
+    },
+    {
+      "chapter": "Chapter 12",
+      "reading_direction": "rtl",
+      "pages": 12,
+      "panels": 51,
+      "flagged": []
+    }
+  ]
+}

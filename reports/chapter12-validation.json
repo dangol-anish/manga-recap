@@ -1,0 +1,46 @@
+{
+  "status": "failed",
+  "manga": "Mushoku Tensei - Jobless Reincarnation",
+  "chapter": "Chapter 12",
+  "total_pages": 12,
+  "completed_inferences": 6,
+  "valid_page_outputs": 0,
+  "model": "ragavsachdeva/magiv3",
+  "revision": "49c73a225122d53adbaa26d53868be81a57706e2",
+  "device": "mps",
+  "model_load_seconds": 9.515012375079095,
+  "recorded_elapsed_seconds": 77.635,
+  "reason": "Magi v3 panel-only validation failed: constrained decoding relabeled text and character boxes as panels. Processing is blocked pending a user-approved plan change.",
+  "pages": [
+    {
+      "page": "001.png",
+      "seconds": 7.175,
+      "rejected_boxes": 15
+    },
+    {
+      "page": "002.png",
+      "seconds": 12.779,
+      "rejected_boxes": 34
+    },
+    {
+      "page": "003.png",
+      "seconds": 13.974,
+      "rejected_boxes": 29
+    },
+    {
+      "page": "004.png",
+      "seconds": 9.906,
+      "rejected_boxes": 28
+    },
+    {
+      "page": "005.png",
+      "seconds": 8.175,
+      "rejected_boxes": 22
+    },
+    {
+      "page": "006.png",
+      "seconds": 12.469,
+      "rejected_boxes": 31
+    }
+  ]
+}

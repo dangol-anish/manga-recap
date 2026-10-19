@@ -1,0 +1,13 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chapter 1 video · Manga Recap</title><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/video.css"><script src="/static/video.js" defer></script></head>
+<body><main><header><div class="mark">M<span>R</span></div><div><p class="eyebrow">MANGA RECAP / STAGE 05</p><h1>Chapter 1 video</h1></div><a id="back" class="back">← Audio</a></header>
+<section class="intro"><h2>Preview &amp; panel timing</h2><p id="stats">Loading approved Chapter 1 audio and panels…</p><p>Panels start with equal time within each beat. Adjust switch times below, then save. The audio stays unchanged.</p></section>
+<p id="notice" role="status" aria-live="polite"></p><section class="editor">
+<label for="beat">Narration beat</label><select id="beat"></select>
+<div id="screen"><img id="panel-image" alt="Selected panel preview"><span id="panel-label"></span></div>
+<div class="actions"><button id="play">Play from this beat</button><button class="secondary" id="stop">Stop preview</button><span id="clock"></span></div>
+<audio id="audio" controls preload="none"></audio><input id="silent-seek" type="range" min="0" step="0.01" aria-label="Silent beat preview position" hidden>
+<p id="narration"></p><p class="hint">Times are seconds from the start of this beat. Audio stays fixed; moving a switch changes the two neighboring panels' screen time. MP4 cuts are rounded to the nearest video frame (24 fps).</p>
+<div id="timings"></div><div class="actions"><button id="save">Save this beat's timing</button><button id="equal" class="secondary">Reset this beat to equal timing</button><span id="saved" role="status"></span></div>
+</section>
+<section class="export"><h2>Export MP4</h2><p>1280 × 720 · 24 fps · simple cuts · panels fitted with black borders, without stretching.</p><div class="actions"><button id="render">Render MP4</button><a id="download" class="download" hidden download>Download Chapter 1 MP4</a></div><progress id="progress" value="0" max="1"></progress><p id="job" role="status" aria-live="polite"></p><video id="result" controls preload="metadata" hidden></video></section>
+</main></body></html>

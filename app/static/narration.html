@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Narration · Manga Recap</title><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/narration.css?v=beats-1"><script src="/static/narration.js?v=audio-1" defer></script></head>
+<body><main>
+<header><div class="mark">M<span>R</span></div><div><p class="eyebrow">MANGA RECAP / STAGE 03</p><h1>Narration</h1></div><a href="/" class="back">← Library</a></header>
+<section class="intro"><h2>Chapter 1</h2><p id="chapter-stats">Loading batches…</p><p>Tell one continuous story with selected panels. Skip unnecessary panels and let a beat span several useful images.</p><p><a id="audio-link" class="download">Listen &amp; generate audio →</a></p></section>
+<div class="prompt-row"><a id="prompt-download" class="download" download>Download selected batch prompt</a><span id="cast-status"></span></div>
+<p class="hint">Each prompt includes exact allowed IDs and the preceding saved story context. A batch or chapter ending does not end the recap.</p>
+<section id="batches" aria-label="Page batches"></section>
+<section class="import-panel"><p class="eyebrow">IMPORT AI REPLY</p><h2>Import story beats</h2>
+<label for="batch-select">Batch</label><select id="batch-select"></select>
+<label class="correction-label"><input type="checkbox" id="final-recap">This is the final batch of my entire recap — allow a closing</label>
+<p class="hint">Leave this off for normal batches, even at a chapter boundary. Choose it before downloading the prompt.</p>
+<details id="continuity-details"><summary>Story context going into this batch</summary><pre id="continuity-context"></pre></details>
+<p class="hint">Reply with cast, beats and continuity. Each beat selects one or more valid IDs; unused panels are allowed. Budget: 40 words per selected panel in a beat.</p>
+<label for="reply">AI JSON reply</label><textarea id="reply" spellcheck="false" placeholder='{"cast":[],"beats":[{"panel_ids":["p001-1","p001-2"],"narration":"One flowing story beat…","unsure":""}],"continuity":{"summary":"…","open_threads":[]}}'></textarea>
+<label class="correction-label"><input type="checkbox" id="corrections-only" disabled>Corrections only — reuse unaffected beats from the failed reply</label>
+<p id="correction-hint" class="hint"></p><button id="import-reply" type="button">Validate & import</button><p id="status" role="status" aria-live="polite"></p>
+<div id="validation" hidden><h3>Reply needs correction</h3><p>Saved narration and cast have not changed.</p><ul id="issues"></ul><label for="redo-message">Message for the AI</label><textarea id="redo-message" readonly></textarea><button id="copy-redo" type="button" class="secondary">Copy redo message</button><span id="copy-status" role="status"></span></div>
+</section><p id="notice" role="status"></p>
+</main></body></html>

@@ -1,0 +1,33 @@
+{
+  "chapter": "Chapter 1",
+  "beats": 30,
+  "panels": 116,
+  "tests_passed": 39,
+  "timing": "equal per beat",
+  "render_token": "27fe83fae8215e74c27bfcd59ceb9284e3951e8614ca2f29751e7c7ad5cfdf7c",
+  "probe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 1280,
+        "height": 720,
+        "r_frame_rate": "24/1",
+        "duration": "391.958333"
+      },
+      {
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "r_frame_rate": "0/0",
+        "duration": "391.966000"
+      }
+    ],
+    "format": {
+      "duration": "391.966000",
+      "size": "22164381"
+    }
+  },
+  "full_decode": "passed"
+}

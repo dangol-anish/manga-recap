@@ -218,3 +218,33 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local manga recap inputs, results, models and state
+manga/
+outputs/
+data/
+.cache/
+vendor/
+.env.*
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.mp4
+*.mkv
+*.zip
+*.cbz
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.flac
+*.mov
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+.DS_Store
