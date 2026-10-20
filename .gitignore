@@ -225,6 +225,7 @@ __marimo__/
 manga/
 outputs/
 data/
+reports/
 .cache/
 vendor/
 .env.*

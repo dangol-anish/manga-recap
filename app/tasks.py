@@ -4,6 +4,18 @@ lock=threading.RLock()
 
 
 def ensure_idle():
+    from app import video_stage7
+    if video_stage7.active is not None:
+        raise FileExistsError("Stage 7 video export is running. Wait for it to finish before starting another task.")
+    from app import speech_stage6
+    if speech_stage6.active is not None:
+        raise FileExistsError("Stage 6 audio is running. Finish or stop it before starting another task.")
+    from app import panel_preparation
+    if panel_preparation.active is not None:
+        raise FileExistsError('Panel preparation is running. Finish or stop it before starting another task.')
+    from app import detection
+    if detection.busy():
+        raise FileExistsError('Stage 3 panel detection is running or finishing its current page. Wait or stop it first.')
     from app import downloader
     if downloader.active is not None:
         raise FileExistsError('A download is running. Stop it or wait for it to finish.')

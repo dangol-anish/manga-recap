@@ -151,12 +151,12 @@ def anchor_times(beat,anchors,words,duration):
     return rows
 
 
-async def capture(text,target,rate="+0%"):
+async def capture(text,target,rate="+0%",voice=None):
     import edge_tts
     events=[]
     async def stream():
         with open(target,'wb') as out:
-            async for chunk in edge_tts.Communicate(text,audio.VOICE,rate=rate,boundary='WordBoundary').stream():
+            async for chunk in edge_tts.Communicate(text,voice or audio.VOICE,rate=rate,boundary='WordBoundary').stream():
                 if chunk['type']=='audio':out.write(chunk['data'])
                 elif chunk['type']=='WordBoundary':events.append({k:chunk[k] for k in ('text','offset','duration')})
     await asyncio.wait_for(stream(),timeout=120)
@@ -170,9 +170,9 @@ def trial_token(beat,source_token,mapping,pacing=None):
     return video.digest(value)
 
 
-def speech(text, target, pacing=None):
+def speech(text, target, pacing=None, voice=None):
     settings=pacing or {}
-    events=asyncio.run(capture(text,target,settings.get('rate','+0%')))
+    events=asyncio.run(capture(text,target,settings.get('rate','+0%'),voice))
     raw_duration=len(video.pcm(target))/48000
     boundaries=[]
     if settings:
@@ -292,8 +292,8 @@ def apply_chapter(mid, chapter, pacing=None):
     root(mid,chapter).mkdir(parents=True,exist_ok=True)
     previous_pacing=audio.pacing(mid, chapter)
     settings=previous_pacing if pacing is None else pacing
-    if (pacing is not None or settings) and settings not in ({'rate':'+20%','speed':1.2,'sentence_pause':.18}, {'rate':'+30%','speed':1.3,'sentence_pause':.18}):
-        raise ValueError('Choose 1.2× or 1.3× with a 180 ms period pause.')
+    if (pacing is not None or settings) and settings not in ({'rate':'+10%','speed':1.1,'sentence_pause':.18}, {'rate':'+20%','speed':1.2,'sentence_pause':.18}, {'rate':'+30%','speed':1.3,'sentence_pause':.18}):
+        raise ValueError('Choose 1.1×, 1.2× or 1.3× with a 180 ms period pause.')
     original_script = storage.read_json(storage.DATA / 'manga' / mid / 'narration.json')
     mappings = []
     for beat in original:

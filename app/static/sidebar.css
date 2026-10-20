@@ -66,7 +66,7 @@
 }
 .stage-icon {flex: 0 0 17px; width: 17px; height: 17px; color: #fffafb99;}
 .stage-item[aria-current="page"] .stage-icon {color: var(--sidebar-aqua);}
-.stage-label {display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; font-size: 13px; line-height: 21px; letter-spacing: -.2px;}
+.stage-label {min-width: 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; font-size: 13px; line-height: 21px; letter-spacing: -.2px;}
 .stage-kicker {color: #fffafbb8; font-weight: 400;}
 .stage-name {color: var(--sidebar-snow); font-weight: 500;}
 @media (max-width: 800px) {

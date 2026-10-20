@@ -4,6 +4,7 @@ import os
 import signal
 from pathlib import Path
 import time
+import threading
 
 from app.storage import ROOT
 
@@ -72,13 +73,28 @@ class Detector:
         # Bound pathological overlapping layouts in the official graph sorter.
         def ordering_timeout(signum, frame):
             raise TimeoutError('Magi panel ordering exceeded 20 seconds; no JSON saved.')
-        previous_handler = signal.signal(signal.SIGALRM, ordering_timeout)
-        signal.alarm(20)
+        has_alarm = hasattr(signal, 'SIGALRM')
+        timer = None
+        if has_alarm:
+            previous_handler = signal.signal(signal.SIGALRM, ordering_timeout)
+            signal.alarm(20)
+        else:
+            # Windows has no SIGALRM. A watchdog ends only the isolated worker
+            # if official ordering hangs; previously committed pages remain safe.
+            def abort_ordering():
+                print('Panel ordering exceeded 20 seconds; stopping worker without a partial page.', flush=True)
+                os._exit(124)
+            timer = threading.Timer(20, abort_ordering)
+            timer.daemon = True
+            timer.start()
         try:
             order = self.utils.sort_panels(ordering_boxes) if boxes else []
         finally:
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, previous_handler)
+            if has_alarm:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, previous_handler)
+            elif timer is not None:
+                timer.cancel()
         if sorted(order) != list(range(len(boxes))):
             raise RuntimeError('Invalid panel reading order.')
         return [boxes[i] for i in order]

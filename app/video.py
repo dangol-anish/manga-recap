@@ -282,29 +282,48 @@ def status(mid, chapter):
         return state
 
 
-def render_to(state, work):
+def render_to(state, work, cancel_event=None):
     """Render a supplied snapshot; publication remains the caller's responsibility."""
     lines=['ffconcat version 1.0']; plan=motion_plan(state)
     with wave.open(str(work/'narration.wav'),'wb') as track:
         track.setparams((1,2,24000,0,'NONE','not compressed'))
         for beat in state['beats']:
+            if cancel_event and cancel_event.is_set():raise InterruptedError('Render interrupted.')
             data = pcm(beat['_audio']) if beat['_audio'] else b'\0\0'*round(beat['duration']*24000)
             track.writeframes(data)
     for index,entry in enumerate(plan):
+        if cancel_event and cancel_event.is_set():raise InterruptedError('Render interrupted.')
         frame=work/f'frame-{index:04}.png'
         cached=ensure_frame(entry['panel'],frame)
         if cached!=frame:shutil.copyfile(cached,frame)
         lines.append(f"file '{frame.name}'")
     (work/'panels.ffconcat').write_text('\n'.join(lines)+'\n')
     with open(work/'ffmpeg.log','w') as log:
-        result = subprocess.run(['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-y',
+        command = ['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-y',
             '-f','concat','-safe','1','-i',str(work/'panels.ffconcat'),'-i',str(work/'narration.wav'),
             '-filter_complex',render_filter(plan),'-map','[visual]','-map','1:a:0','-r',str(FPS),'-fps_mode','cfr','-c:v','libx264',
             '-preset','veryfast','-tune','stillimage','-crf','21','-threads','2','-filter_threads','1','-filter_complex_threads','1',
             '-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-t',str(state['duration']),
-            '-movflags','+faststart','-progress',str(work/'progress.txt'),str(work/'chapter.mp4')],
-            stdout=subprocess.DEVNULL,stderr=log,timeout=3600)
-    if result.returncode:raise ValueError('FFmpeg export failed: '+(work/'ffmpeg.log').read_text()[-600:])
+            '-movflags','+faststart','-progress',str(work/'progress.txt'),str(work/'chapter.mp4')]
+        if cancel_event is None:
+            result=subprocess.run(command,stdout=subprocess.DEVNULL,stderr=log,timeout=3600)
+            returncode=result.returncode
+        else:
+            process=subprocess.Popen(command,stdout=subprocess.DEVNULL,stderr=log)
+            started=time.monotonic()
+            try:
+                while process.poll() is None:
+                    if cancel_event.is_set():raise InterruptedError('Render interrupted.')
+                    if time.monotonic()-started>3600:raise TimeoutError('Rendering exceeded one hour.')
+                    try:process.wait(timeout=.25)
+                    except subprocess.TimeoutExpired:pass
+                returncode=process.returncode
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try:process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
+    if returncode:raise ValueError('FFmpeg export failed: '+(work/'ffmpeg.log').read_text()[-600:])
     probe=subprocess.run(['ffprobe','-v','error','-show_entries','stream=codec_name,codec_type,duration:format=duration',
                           '-of','json',str(work/'chapter.mp4')],capture_output=True,text=True,check=True,timeout=30)
     info=json.loads(probe.stdout)

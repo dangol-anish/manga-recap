@@ -1,3 +1,30 @@
+# Current audio default
+
+- New narration audio defaults to Brian Multilingual at 1.1× (+10%) with 180 ms period pauses. Preserve existing chapters' recorded voice, pacing, audio, phrase timestamps and videos when changing defaults; do not regenerate media automatically.
+
+# Current approved build: Stage 7 Video
+
+- The user requested a proper video player because asynchronous image swaps repeated old panels during seeking. Use a native HTML5 video element playing the actual rendered MP4, with native seeking/fullscreen; do not simulate main preview playback with still-image swaps. Build/reuse the current MP4 when explicitly requested; the initial real-chapter preview render for this fix is approved. Timing edits invalidate the preview until rebuilt, and status polling must never reload or rewind the same current MP4. Preserve all existing audio.
+
+- Build a separate generic Stage 7 Video page from current Stage 4 crops, valid Stage 5 narration and existing Stage 6 audio/phrase timestamps. Preserve audio and script exactly; never run TTS, detection or cropping. Default panel switches to saved phrase times, provide synchronized preview and per-beat timing edits/reset, and export MP4 with the approved blurred panel background, depth, fractional smooth zooms/slides and brief crossfades. Keep frame rounding cumulative, reject stale edits/exports, isolate new files from historical videos, retain prior exports, render locally in the background with progress and safe shutdown. Use the dark glass palette and shared controls. Test with isolated short fixtures; do not automatically export a real chapter. Show the ready preview page in the external browser, give one run command and stop. No automatic commit or push.
+
+# Current approved build: Stage 6 Audio
+
+- Include a single seekable full-chapter audio player assembled locally from current beat clips without TTS; invalidate/rebuild it when any clip changes and retain older files.
+- Build a separate generic Stage 6 Audio page using only valid imported Stage 5 narration. Use Andrew Multilingual, 1.2x speed and measured 180 ms period pauses. Generate sequentially with real word/phrase timestamps, safe stop/resume, chapter playback and individual-beat regeneration. Isolate new audio and jobs from historical media, preserve completed clips and older regenerated revisions, reject stale sources, and retain the exact script. Use the dark glass palette and shared dropdown geometry. Do not run detection, prepare panels, rewrite/import narration, generate video or automatically synthesize real chapters. Generation starts only through explicit controls. Test with isolated fixtures, show the running external-browser page, give one run command and stop. No automatic commit or push.
+
+# Current approved build: Stage 5 Narration
+
+- Build the separate generic Stage 5 Narration page from current Stage 4 prepared panels. Export labeled photos in plain folders of at most 20 in natural page order; never ZIP them. Prompts must be copyable in the page, not downloadable. Include the narration master, exact IDs, preceding saved cast/context, previous narration ending and a version receipt in each batch prompt. Support fresh AI chats, story beats with optional panel selection, JSON validation and targeted corrections. Save successful narration, cast and provenance-backed continuity atomically; block stale/dependent imports after upstream changes. Keep the new workflow's saved state separate from historical narration/media. Keep the Stage 4 contact sheet hidden as requested, with folder and Export & narrate actions. Use dark glass and the shared select spacing. Do not run detection, prepare chapters, call TTS, generate video or import real narration automatically. Show Stage 5 in an external browser, give one run command and stop. No automatic commit or push.
+
+# Current approved build: Stage 4 Panel Review
+
+- Build Stage 4 from saved Stage 3 detections only: selectable chapters, panel crops with 1% padding, unique IDs such as `p0000-1`, whole-page labeled copies, flagged-first review contact sheets, and per-page add/delete/reorder/resize editing. Save fixes independently of detection and regenerate only the saved page. Preserve manual fixes and stale edited data; never overwrite them silently. Use dark glass and shared dropdown spacing, native folder buttons and resumable background preparation. Do not run Magi, OCR, narration or later stages. Do not automatically prepare real chapters during implementation; the user starts selected chapters explicitly. Test with isolated fixtures, show the external-browser page and stop.
+
+# Current approved build: Stage 3 Panel Detection
+
+- Build the approved separate Stage 3 page with manga/chapter selection, saved reading direction, a sequential background Magi v3 worker, accurate progress, safe stop/resume, content/model/direction fingerprint checks, valid ordered panel JSONs, numbered previews, flagged reports and native output-folder buttons. Use only normal model detection and discard all non-panel boxes immediately. Do not run real chapter detection during implementation; the user starts selected chapters explicitly. No cropping, OCR, character association, narration or other new stages. Preserve existing inputs and older outputs. Support Mac and Windows, show the running page in an external browser, give one run command and stop.
+
 ## Chapter folder naming
 
 - Download chapter folders use readable consistent names such as `Chapter 1`, `Chapter 2`, `Chapter 2.5`, without generated hash/ID suffixes. Keep source IDs in JSON metadata only. Reject duplicate chapter-number releases or destination conflicts instead of appending suffixes or overwriting.

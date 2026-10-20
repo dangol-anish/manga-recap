@@ -80,8 +80,20 @@ async def lifespan(app):
     try:
         from app import downloader
         downloader.recover()
+        from app import detection
+        detection.recover()
+        from app import panel_preparation
+        panel_preparation.recover()
+        from app import speech_stage6
+        speech_stage6.recover()
+        from app import video_stage7
+        video_stage7.recover()
         yield
     finally:
+        video_stage7.shutdown()
+        speech_stage6.shutdown()
+        panel_preparation.shutdown()
+        detection.shutdown()
         downloader.shutdown()
         with mutex:
             stop()
@@ -609,3 +621,41 @@ app.include_router(downloader_router)
 
 from app.renumbering import router as renumbering_router
 app.include_router(renumbering_router)
+
+@app.get("/detection")
+def detection_page():
+    return FileResponse(ROOT / "app/static/detection.html")
+
+from app.detection import router as detection_router
+app.include_router(detection_router)
+
+@app.get("/panels")
+def panel_preparation_page():
+    return FileResponse(ROOT / "app/static/panel_preparation.html")
+
+from app.panel_preparation import router as preparation_router
+app.include_router(preparation_router)
+
+
+@app.get('/story')
+def story_stage5_page():
+    return FileResponse(ROOT / 'app/static/story.html')
+
+from app.narration_stage5 import router as story_router
+app.include_router(story_router)
+
+
+@app.get('/speech')
+def speech_stage6_page():
+    return FileResponse(ROOT / 'app/static/speech.html')
+
+from app.speech_stage6 import router as speech_router
+app.include_router(speech_router)
+
+
+@app.get('/cinema')
+def video_stage7_page():
+    return FileResponse(ROOT / 'app/static/cinema.html')
+
+from app.video_stage7 import router as cinema_router
+app.include_router(cinema_router)

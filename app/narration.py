@@ -221,19 +221,44 @@ def validate_payload(payload,expected):
 
 
 def redo_message(validation,payload,expected):
-    lines=['Correct only the affected story beats or metadata below. Do not rewrite unaffected beats. Return JSON only.']
+    beats=payload.get('beats',[]) if isinstance(payload,dict) else []
+    beats=beats if isinstance(beats,list) else []
+    required=sorted(set(validation['fix_beats']))
+    lines=[
+        'TASK: REPAIR THE FAILED DRAFT. This is a PARTIAL CORRECTION request, not a new full-batch narration request.',
+        'Use the original uploaded manga photos and the original batch prompt for evidence and story style. The correction output contract below replaces the original full-reply output schema for this turn.',
+        'Do not return the entire original beats array. Do not return unaffected beats. Do not renumber original beats after leaving some out.',
+        'Every replacement MUST contain replace_beat as a JSON INTEGER identifying its ORIGINAL draft position. A replacement without replace_beat is invalid. Do not use id, beat, beat_number, a string number, or the replacement array position instead.',
+        'REQUIRED_REPLACE_BEAT_NUMBERS: '+json.dumps(required),
+        'Return exactly one replacement for EACH number in REQUIRED_REPLACE_BEAT_NUMBERS, in that order, with no duplicate or additional numbers. Keep these prefilled numbers unchanged in the template below.',
+        'ERRORS TO FIX:'
+    ]
+    lines += list(dict.fromkeys(validation['errors']))
     lines += [pid+': '+' '.join(reasons) for pid,reasons in validation['issues'].items()]
-    lines += validation['errors']
-    if validation['fix_beats']:
-        lines.append('Replace these current draft beat numbers: '+', '.join(map(str,validation['fix_beats']))+'.')
-        for index in validation['fix_beats']:
-            lines.append(f'Current draft beat {index}: '+json.dumps(payload['beats'][index-1],ensure_ascii=False))
-        lines.append('Each correction must include replace_beat with its current draft number, panel_ids, narration and unsure. To remove an unnecessary affected beat, return panel_ids: [] and narration: "" for that replace_beat.')
-    else:lines.append('No existing beat needs replacement. Return beats: [] and fix only the reported cast/continuity/format issues. If there were no beats, provide a full reply instead.')
-    lines += ['VALID_PANEL_IDS: '+json.dumps(expected),
-              'Use only these exact IDs, once each in reading order. Panels may be skipped. Do not reuse IDs from unaffected beats. Ground every claim in the pages; omit or mark uncertainty instead of inventing details.',
-              'Do not add a batch/chapter conclusion. The narration budget is 40 words per selected panel in each beat.',
-              'Correction format: {"beats":[{"replace_beat":2,"panel_ids":["EXACT_ID_FROM_MANIFEST"],"narration":"...","unsure":""}],"continuity":{"summary":"...","open_threads":[]}}. Include cast only if it needs updating.']
+    if not beats:
+        lines += ['There is no usable draft to patch. Return a full reply following the original batch prompt instead, and import it with Corrections only OFF.']
+        return '\n'.join(lines)
+    template=[]
+    for index in required:
+        old=beats[index-1] if 0<index<=len(beats) and isinstance(beats[index-1],dict) else {}
+        item={'replace_beat':index,'panel_ids':old.get('panel_ids',[]),'narration':old.get('narration',''),'unsure':old.get('unsure',''),'anchors':old.get('anchors',[])}
+        template.append(item)
+    frozen=[{'original_beat':i,'panel_ids':beat.get('panel_ids',[])} for i,beat in enumerate(beats,1) if i not in required and isinstance(beat,dict)]
+    lines += [
+        'FROZEN_UNAFFECTED_BEATS (already retained by the app; DO NOT include them in your reply):\n'+json.dumps(frozen),
+        'VALID_PANEL_IDS (authoritative reading order):\n'+json.dumps(expected),
+        'REPAIR RULES:',
+        '- panel_ids selects only the panels actually displayed in a beat. You may omit unnecessary panels. Do not list every panel you read for context.',
+        '- For each non-silent replacement, panel_ids MUST exactly equal the list of anchors panel_id values: same IDs, same count, same order. If only three useful anchors fit, select only those three panels; do not keep extra unanchored panels. Recheck story grounding and the 40-word-per-selected-panel budget after changing selection.',
+        '- Every anchor phrase is copied verbatim from its own narration, occurs exactly once there, and begins/ends on whole words. The first starts at character 0; later phrases advance without overlap. Never invent matching words or add filler to satisfy anchors.',
+        '- Mentally insert replacements at their ORIGINAL replace_beat positions among the frozen beats, then flatten ALL selected panel_ids. Every ID must occur once and move strictly forward through VALID_PANEL_IDS. Check boundaries between beats, not just the inside of each beat. An earlier skipped ID cannot reappear after a later ID.',
+        '- If two affected beats cross in reading order, repair their grouping and supported narration together. Do not just swap ID labels onto the wrong events. Frozen beats and their IDs cannot be changed or reused.',
+        '- Preserve narration where compatible with evidence and order. Revise it when needed for correct grouping or fewer selected panels. Keep the story continuous; no unsupported claims or batch closing.',
+        '- To delete an affected beat, keep its ORIGINAL replace_beat and return panel_ids: [], narration: "", unsure: "", anchors: []. Never renumber later replacements.',
+        'REPLACEMENT_TEMPLATE (copied from the FAILED draft, so its content still needs repair; replace_beat numbers are already correct):\n'+json.dumps({'beats':template},ensure_ascii=False),
+        'Reply with the repaired template JSON only. The top-level beats array contains only the numbered replacements above. Existing cast, continuity, chapter_summary, memory and batch_receipt are retained automatically. Include a top-level metadata field only if an error above requires correcting it, and preserve its supported content.',
+        'FINAL OUTPUT CHECK: the replace_beat list equals REQUIRED_REPLACE_BEAT_NUMBERS exactly; all required non-silent anchors match panel_ids exactly; phrases match narration; the combined frozen-plus-replaced sequence has no duplicate or backwards ID; word limits pass. Return no markdown, explanations, or full-batch reply.'
+    ]
     return '\n'.join(lines)
 
 
@@ -250,12 +275,14 @@ def merge_cast(existing,incoming):
     return result
 
 
-def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=False,final_recap=False,context_token=None,require_receipt=False):
-    batch=find_batch(manga_id,chapter,batch_id,fingerprint)
-    previous=story_context(manga_id,chapter,batch_id)
+def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=False,final_recap=False,context_token=None,require_receipt=False,backend=None):
+    import sys
+    engine=backend or sys.modules[__name__]
+    batch=engine.find_batch(manga_id,chapter,batch_id,fingerprint)
+    previous=engine.story_context(manga_id,chapter,batch_id)
     if context_token is not None and context_token!=previous['token']:
         raise FileExistsError('Earlier narration changed. Download a fresh batch prompt before importing this reply.')
-    expected=batch['panel_ids'];pending_file=pending_path(manga_id,batch_id,chapter)
+    expected=batch['panel_ids'];pending_file=engine.pending_path(manga_id,batch_id,chapter)
     pending=storage.read_json(pending_file)
     if pending and (pending.get('format')!='beats-v1' or pending['fingerprint']!=fingerprint or pending.get('context_token')!=previous['token']):pending=None
     try:
@@ -273,22 +300,35 @@ def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=Fa
         return {'ok':False,'issues':{},'errors':[message],'fix_ids':[],'fix_beats':[],
                 'can_correct':bool(pending and corrections_only),
                 'redo_message':'Fix JSON syntax only, retaining the same story beats and text. Return a valid JSON object.\n'+message}
+    # A complete fresh-chat reply has an unambiguous schema. Validate it as a
+    # full reply even when the previous failure left the patch checkbox checked.
+    full_fields={'batch_receipt','cast','beats','continuity','chapter_summary','memory'}
+    complete_reply=(isinstance(payload,dict) and full_fields<=payload.keys()
+                    and isinstance(payload.get('beats'),list) and bool(payload['beats'])
+                    and all(isinstance(beat,dict) and 'replace_beat' not in beat for beat in payload['beats']))
+    if corrections_only and complete_reply:corrections_only=False
+    reply_mode='corrections' if corrections_only else 'full'
     if corrections_only:
         if not pending or not pending['validation'].get('can_correct'):raise ValueError('No correctable current draft exists. Generate and paste a full reply from the current prompt.')
-        if not isinstance(payload,dict) or not isinstance(payload.get('beats'),list):
-            raise ValueError('Corrections need a beats array with replace_beat numbers.')
+        required=set(pending['validation']['fix_beats']);used=set();invalid=[]
+        replacements=payload.get('beats') if isinstance(payload,dict) else None
+        if isinstance(replacements,list):
+            for position,beat in enumerate(replacements,1):
+                index=beat.get('replace_beat') if isinstance(beat,dict) else None
+                if not isinstance(index,int) or isinstance(index,bool) or index not in required or index in used:
+                    invalid.append(position)
+                else:used.add(index)
+        if not isinstance(replacements,list) or invalid:
+            numbers=', '.join(map(str,sorted(required))) or 'none (metadata correction only)'
+            message='This is not a numbered partial correction. Each replacement needs a unique integer replace_beat from: '+numbers+'.'
+            if invalid:message+=' Check replacement entries: '+', '.join(map(str,invalid))+'.'
+            message+=' If this is a full batch reply, include batch_receipt, cast, beats, continuity, chapter_summary and memory; the app will recognize it automatically.'
+            return {'ok':False,'reply_mode':'corrections','issues':{},'errors':[message],
+                    'fix_ids':[],'fix_beats':sorted(required),'can_correct':True,
+                    'redo_message':redo_message(pending['validation'],pending['payload'],expected)}
         candidate=json.loads(json.dumps(pending['payload']))
-        required=set(pending['validation']['fix_beats']);used=set();replacement_errors=[]
-        for beat in payload['beats']:
-            index=beat.get('replace_beat') if isinstance(beat,dict) else None
-            if not isinstance(index,int) or isinstance(index,bool) or index not in required or index in used:
-                replacement_errors.append('Every replacement must identify a different affected replace_beat number: '+', '.join(map(str,sorted(required)))+'.');continue
-            used.add(index)
-            candidate['beats'][index-1]={k:v for k,v in beat.items() if k!='replace_beat'}
-        if replacement_errors:
-            validation=dict(pending['validation']);validation['errors']=replacement_errors
-            validation.update(ok=False,can_correct=True,redo_message=redo_message(validation,candidate,expected))
-            return validation
+        for beat in replacements:
+            candidate['beats'][beat['replace_beat']-1]={k:v for k,v in beat.items() if k!='replace_beat'}
         for key in ('cast','continuity','chapter_summary','memory','batch_receipt'):
             if key in payload:candidate[key]=payload[key]
         # Explicit empty corrections remove an affected beat without requiring coverage.
@@ -302,6 +342,7 @@ def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=Fa
         message='This reply belongs to another manga, chapter or batch. Generate a new full reply using the current batch images and prompt; do not just relabel its receipt.'
         return {'ok':False,'issues':{},'errors':[message],'fix_ids':[],'fix_beats':[],'can_correct':False,'redo_message':message}
     validation,beats,cast,continuity=validate_payload(payload,expected)
+    validation['reply_mode']=reply_mode
     receipt={'manga_id':manga_id,'chapter':chapter,'batch_id':batch_id,'fingerprint':fingerprint,'context_token':previous['token']}
     if isinstance(payload,dict) and (require_receipt or 'batch_receipt' in payload) and payload.get('batch_receipt')!=receipt:
         validation['errors'].append('batch_receipt is missing or does not match this manga, chapter, batch and context. Copy BATCH_RECEIPT exactly from the current prompt: '+json.dumps(receipt))
@@ -326,7 +367,7 @@ def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=Fa
         storage.write_json(pending_file,{'format':'beats-v1','fingerprint':fingerprint,'context_token':previous['token'],
                            'payload':payload,'validation':validation})
         return validation
-    state=load_state(manga_id);state['schema_version']=6
+    state=engine.load_state(manga_id);state['schema_version']=6
     chapter_state=state['chapters'].setdefault(chapter,{'batches':{}})
     old=chapter_state['batches'].get(batch_id)
     if old and state.get('legacy_cast_after')==[chapter,batch_id]:
@@ -336,15 +377,15 @@ def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=Fa
     chapter_state['batches'][batch_id]={'format':'beats-v1','fingerprint':fingerprint,'context_token':previous['token'],
                                       'beats':beats,'continuity':continuity,'cast':cast,'chapter_summary':summary,'memory':facts,'final_recap':bool(final_recap)}
     combined=[];preceding=[];seed=previous.get('chapter_seed')
-    for item in batches(manga_id,chapter):
+    for item in engine.batches(manga_id,chapter):
         digest=_digest({'earlier_chapters':seed,'batches':preceding}) if seed else _digest(preceding)
         entry=chapter_state['batches'].get(item['id'])
         if not entry or entry.get('fingerprint')!=item['fingerprint'] or entry.get('context_token')!=digest:break
         combined.extend(entry['beats']);preceding.append(dict(entry,id=item['id']))
     chapter_state['beats']=combined
     state['cast']=merge_cast(state['cast'],cast)
-    storage.write_json(state_path(manga_id),state)
+    storage.write_json(engine.state_path(manga_id),state)
     pending_file.unlink(missing_ok=True)
     selected=sum(len(b['panel_ids']) for b in beats)
-    return {'ok':True,'imported_beats':len(beats),'selected_panels':selected,'skipped_panels':len(expected)-selected,
+    return {'ok':True,'reply_mode':reply_mode,'imported_beats':len(beats),'selected_panels':selected,'skipped_panels':len(expected)-selected,
             'chapter_beats':len(combined),'cast_count':len(state['cast'])}

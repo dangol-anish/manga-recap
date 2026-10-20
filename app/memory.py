@@ -16,8 +16,9 @@ def ordered(state,current=None):
     return sorted(set(state['chapters'])|({current} if current else set()),key=lambda s:storage.natural_key(Path(s)))
 
 
-def lineage(mid,chapter,batch_id):
+def lineage(mid,chapter,batch_id,backend=None):
     from app import narration
+    narration=backend or narration
     state=narration.load_state(mid);history=[];prior=None
     for name in ordered(state,chapter):
         if storage.natural_key(Path(name))>storage.natural_key(Path(chapter)):break
@@ -39,12 +40,13 @@ def lineage(mid,chapter,batch_id):
     raise FileNotFoundError('Batch not found.')
 
 
-def packet(mid,chapter,batch_id):
+def packet(mid,chapter,batch_id,backend=None):
     from app import narration
-    state,history,token,seed=lineage(mid,chapter,batch_id)
+    narration=backend or narration
+    state,history,token,seed=lineage(mid,chapter,batch_id,backend)
     ending=[b['narration'] for item in history for b in item['beats']][-3:]
     latest=history[-1]['continuity'] if history else {'summary':'','open_threads':[]}
-    cast=[]
+    cast=list(state.get('seed_cast',[]))
     # Legacy imports stored only one aggregate cast. Expose it only after its
     # original final import, never to prompts for earlier pages.
     cutoff=state.get('legacy_cast_after')
