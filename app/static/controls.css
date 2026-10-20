@@ -1,0 +1,24 @@
+/* Shared native dropdown geometry. Keep arrows inset and text clear of them. */
+select:not([multiple]):not([size]),
+select:not([multiple])[size="1"] {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-inline-end: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='m2 2 4 4 4-4' stroke='%232b2c28' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 12px 8px;
+  background-position: right 14px center;
+  text-overflow: ellipsis;
+}
+html[data-theme="dark"] select:not([multiple]):not([size]),
+html[data-theme="dark"] select:not([multiple])[size="1"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='m2 2 4 4 4-4' stroke='%23fffafb' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+@media (forced-colors: active) {
+  select:not([multiple]):not([size]),
+  select:not([multiple])[size="1"] {
+    -webkit-appearance: auto;
+    appearance: auto;
+    background-image: none;
+  }
+}

@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app import storage, download_sources as sources
+from app.chapter_names import chapter_folder_name
 
 router = APIRouter(prefix='/api/downloader')
 lock = threading.RLock()
@@ -111,11 +112,14 @@ def create(catalog_id, chapter_ids):
     if not chapters or len(chapters) != len(chosen): raise ValueError('Choose valid chapters from the loaded manga.')
     folder = f'manga/{slug(catalog["title"])}-{catalog["host"].split(".")[0]}-{catalog_id[:8]}'
     destination(folder)
+    names = [chapter_folder_name(chapter['name']) for chapter in chapters]
+    if len({name.casefold() for name in names}) != len(names):
+        raise ValueError('Multiple selected releases have the same chapter number. Select one release per chapter; no suffixes will be added.')
     ident = uuid.uuid4().hex
     job = {'id': ident, 'catalog_id': catalog_id, 'title': catalog['title'], 'host': catalog['host'], 'source': catalog['source'], 'source_url': catalog['url'], 'folder': folder, 'status': 'paused', 'message': 'Ready to download.', 'elapsed_seconds': 0, 'chapters': []}
     for chapter in chapters:
-        # Source IDs keep duplicate chapter numbers/releases from colliding.
-        job['chapters'].append({**chapter, 'folder': folder + '/' + slug(chapter['name']) + '-' + sha256(chapter['id'].encode()).hexdigest()[:8], 'status': 'pending', 'pages': []})
+        # IDs remain in the manifest; readable folders never get generated suffixes.
+        job['chapters'].append({**chapter, 'name': chapter_folder_name(chapter['name']), 'folder': folder + '/' + chapter_folder_name(chapter['name']), 'status': 'pending', 'pages': []})
     save(job)
     return job
 

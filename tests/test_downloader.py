@@ -233,6 +233,40 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         launch.assert_not_called()
 
+    def test_clean_chapter_names_and_duplicate_release_rejection(self):
+        from app.chapter_names import chapter_folder_name
+        for name,expected in [('Chapter 001: title','Chapter 1'),('Episode 2','Chapter 2'),('Ch. 0002.50','Chapter 2.5'),('Chapter 0','Chapter 0')]:
+            self.assertEqual(chapter_folder_name(name),expected)
+        self.assertEqual(self.job['chapters'][0]['folder'].split('/')[-1],'Chapter 1')
+        self.catalog['chapters'].append({'id':'c2','name':'Chapter 1: other release','url':'https://mangapill.com/chapters/c2'})
+        storage.write_json(d.record_path('catalogs',self.catalog['id']),self.catalog)
+        with self.assertRaisesRegex(ValueError,'same chapter number'):d.create(self.catalog['id'],['c1','c2'])
+
+    def test_migration_preserves_images_and_updates_journal_references(self):
+        from scripts.normalize_chapter_folders import migrate
+        old = self.job['folder']+'/Chapter 1-12345678'
+        self.job['chapters'][0]['folder']=old;d.save(self.job)
+        folder=d.destination(old);folder.mkdir(parents=True)
+        (folder/'0000.png').write_bytes(b'original image')
+        storage.write_json(folder/'.download-owner.json',{'job_id':self.job['id']})
+        storage.write_json(storage.DATA/'renumbering/transactions/example.json',{'folder':old})
+        moves=migrate()
+        self.assertEqual(moves,[(old,self.job['folder']+'/Chapter 1')])
+        new=d.destination(self.job['folder']+'/Chapter 1')
+        self.assertEqual((new/'0000.png').read_bytes(),b'original image')
+        self.assertEqual(d.load('jobs',self.job['id'])['chapters'][0]['folder'],self.job['folder']+'/Chapter 1')
+        self.assertEqual(storage.read_json(storage.DATA/'renumbering/transactions/example.json')['folder'],self.job['folder']+'/Chapter 1')
+
+    def test_migration_refuses_existing_destination(self):
+        from scripts.normalize_chapter_folders import migrate
+        old=self.job['folder']+'/Chapter 1-12345678'
+        self.job['chapters'][0]['folder']=old;d.save(self.job)
+        source=d.destination(old);source.mkdir(parents=True)
+        storage.write_json(source/'.download-owner.json',{'job_id':self.job['id']})
+        d.destination(self.job['folder']+'/Chapter 1').mkdir()
+        with self.assertRaises(ValueError):migrate()
+        self.assertTrue(source.exists())
+
     def test_one_task_at_a_time(self):
         from app.tasks import ensure_idle
         d.active={'id':self.job['id'],'started':0}

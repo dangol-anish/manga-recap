@@ -1,3 +1,7 @@
+## Chapter folder naming
+
+- Download chapter folders use readable consistent names such as `Chapter 1`, `Chapter 2`, `Chapter 2.5`, without generated hash/ID suffixes. Keep source IDs in JSON metadata only. Reject duplicate chapter-number releases or destination conflicts instead of appending suffixes or overwriting.
+
 # Current approved step: Stage 2 Renumbering
 
 - Implement chapter-folder selection and explicit renumbering of remaining images from `0000` in natural filename order, preserving original extensions and never overwriting files. Keep the approved dark glass styling. Renumber immediately when the user presses the button, without a preview step. After success, provide right-aligned native Open folder buttons per chapter. Operate only on the user-selected repo-local chapters; do not delete images, run detection or change other stages. Test with isolated fixtures, show the page and stop. No automatic commit or push.
@@ -12,6 +16,8 @@
 - Gento was explicitly authorized as a read-only reference for the prior architecture study. Implement this downloader independently inside this repository; do not import or execute the reference project.
 
 # Current direction: user-led rebuild and design standard
+
+- All single-line dropdowns must use shared `app/static/controls.css`: a 14 px arrow inset and 44 px trailing text padding. Include this stylesheet after page styles in every new page. Do not rely on the browser’s edge-hugging native arrow or override this spacing locally. Preserve native keyboard interaction and forced-colors accessibility.
 
 - The approved sidebar appearance is dark glass: Onyx and Graphite surfaces, Pearl Aqua accents, Snow text, minimal decoration. Do not switch it to a light/Snow surface.
 
