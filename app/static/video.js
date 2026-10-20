@@ -71,4 +71,6 @@ $('#save').onclick=async()=>{try{if(!valid())throw Error('Switch times must incr
 $('#render').onclick=async()=>{try{stop();await request(base+'/export',{render_token:state.render_token});await refresh();clearInterval(timer);timer=setInterval(()=>refresh(),2000);}catch(e){$('#notice').textContent=e.message;}};
 refresh(true).then(()=>{timer=setInterval(()=>{if(state?.job.running)refresh();},2000);});requestAnimationFrame(frame);
 
-document.querySelector('#trial-link').onclick=()=>{if(dirty){document.querySelector('#notice').textContent='Save the numeric timing edit first.';return false;}selected=6;document.querySelector('#beat').value=6;edit();};
+document.querySelector('#trial-link').onclick=()=>true;
+
+document.querySelector("h1").textContent=chapter+" video";document.title=chapter+" video · Manga Recap";

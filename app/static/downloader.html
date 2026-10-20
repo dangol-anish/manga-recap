@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Downloader · Manga Recap</title>
+<link rel="stylesheet" href="/static/sidebar.css"><link rel="stylesheet" href="/static/downloader.css?v=folder-2">
+<script src="/static/downloader.js?v=folder-2" defer></script>
+</head>
+<body class="with-stage-sidebar">
+<aside class="stage-sidebar" aria-label="Workflow stages">
+<div class="stage-brand">Manga Recap</div><p class="stage-caption">Workflow</p>
+<ol class="stage-list"><li><a class="stage-item" href="/" aria-current="page"><svg class="stage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg><span class="stage-label"><span class="stage-kicker">Stage 1:</span> <span class="stage-name">Downloader</span></span></a></li></ol>
+<a class="library-shortcut" href="/library">Existing library <span aria-hidden="true">↗</span></a>
+</aside>
+<main>
+<header><div><p class="overline">Stage 1</p><h1>Downloader</h1><p class="subtitle">Bring your chapters home.</p></div><span class="local"><i></i> Local workspace</span></header>
+<section class="surface source-panel" aria-labelledby="source-title">
+<h2 id="source-title">Manga source</h2><p class="muted">Paste a series link from MangaPill or WeebCentral.</p>
+<form id="source-form"><label class="sr-only" for="source-url">Manga series URL</label><input id="source-url" type="url" placeholder="https://mangapill.com/manga/…" required autocomplete="off"><button id="load-button">Load chapters <span aria-hidden="true">→</span></button></form>
+<p id="notice" role="status" aria-live="polite"></p>
+</section>
+<section id="catalog-panel" class="surface" hidden aria-labelledby="manga-title">
+<div class="section-head"><div><p class="overline" id="source-name"></p><h2 id="manga-title"></h2></div><span class="count" id="selection-count"></span></div>
+<div class="chapter-tools"><div><button class="quiet" id="select-all" type="button">Select all</button><button class="quiet" id="clear-selection" type="button">Clear</button></div><div class="range"><label for="range-start">List positions</label><input id="range-start" type="number" min="1" value="1" aria-label="First chapter list position"><span>–</span><input id="range-end" type="number" min="1" value="1" aria-label="Last chapter list position"><button class="quiet" id="apply-range" type="button">Select range</button></div></div>
+<div id="chapter-list" class="chapter-list"></div>
+<div class="download-footer"><p class="muted">Saves numbered original images inside <code>manga/</code>.</p><button id="download-button" type="button" disabled>Download selected</button></div>
+</section>
+<section id="progress-panel" class="surface" hidden aria-labelledby="progress-title">
+<div class="section-head"><div><p class="overline">Current download</p><h2 id="progress-title"></h2></div><span class="job-status" id="job-status"></span></div>
+<div class="progress-heading"><strong id="progress-label">Loading page lists…</strong><span id="progress-percent"></span></div>
+<progress id="download-progress" max="100" aria-label="Verified page download progress"></progress>
+<div class="progress-meta"><span id="chapter-progress"></span><span id="elapsed"></span></div>
+<p id="job-message" role="status" aria-live="polite"></p>
+<div id="chapter-results"></div>
+<div class="job-footer"><p class="destination">Destination <code id="destination"></code></p><div class="job-actions"><button id="open-folder-button" class="secondary folder-button" type="button" title="Open download folder in Finder or File Explorer" disabled><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"/></svg>Open folder</button><button id="stop-button" class="secondary" type="button" hidden>Stop download</button><button id="resume-button" type="button" hidden>Resume / retry</button></div></div>
+<p id="folder-message" role="status" aria-live="polite" hidden></p>
+<p class="muted footnote">Progress is saved on disk. You can close this tab; stopping the server pauses the download. Panel detection starts separately.</p>
+</section>
+<section id="history-panel" hidden><div class="section-head history-heading"><h2>Recent downloads</h2><span class="muted">Saved on this Mac</span></div><div id="history-list"></div></section>
+<footer>MangaPill &amp; WeebCentral <span>Images only · no automatic detection</span></footer>
+</main>
+</body>
+</html>

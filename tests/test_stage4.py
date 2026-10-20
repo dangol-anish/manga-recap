@@ -62,8 +62,8 @@ class AudioTests(unittest.TestCase):
         self.beat_patch.stop()
         client=TestClient(main.app)
         for suffix,method in [('',client.get),('/generate',client.post),('/beats/1/regenerate',client.post),('/beats/1/audio',client.get)]:
-            self.assertEqual(method('/api/audio/test/Chapter%2012'+suffix).status_code,403)
-        self.assertEqual(client.get('/audio/test/Chapter%2012').status_code,403)
+            self.assertEqual(method('/api/audio/test/Chapter%2012'+suffix).status_code,404)
+        self.assertEqual(client.get('/audio/test/Chapter%2012').status_code,404)
         self.beat_patch.start()
 
     def test_audio_asset_range_request(self):

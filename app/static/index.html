@@ -3,12 +3,18 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Library · Manga Recap</title><link rel="stylesheet" href="/static/style.css">
-<script src="/static/library.js" defer></script>
+<link rel="stylesheet" href="/static/sidebar.css">
+<script src="/static/library.js?v=generic-1" defer></script>
 </head>
-<body>
+<body class="with-stage-sidebar">
+<aside class="stage-sidebar" aria-label="Workflow stages">
+<div class="stage-brand"><span>Manga Recap</span></div>
+<p class="stage-caption">Workflow</p>
+<ol class="stage-list"><li><a class="stage-item" href="/" style="text-decoration:none"><svg class="stage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg><span class="stage-label"><span class="stage-kicker">Stage 1:</span> <span class="stage-name">Downloader</span></span></a></li></ol>
+</aside>
 <main>
-<header><div class="mark">M<span>R</span></div><div><p class="eyebrow">MANGA RECAP / STAGE 01</p><h1>Library</h1></div><span class="local">● Local · 127.0.0.1</span></header>
-<section class="intro"><h2>Your chapters, in order.</h2><p>Add a manga folder, choose its reading direction, then test one chapter. Magi v3 detects panels locally and saves their reading order.</p></section>
+<header><div class="mark">M<span>R</span></div><div><p class="eyebrow">MANGA RECAP / LIBRARY</p><h1>Library</h1></div><span class="local">● Local · 127.0.0.1</span></header>
+<section class="intro"><h2>Your chapters, in order.</h2><p>Add a manga folder, choose its reading direction, then choose a chapter to process. Magi v3 detects panels locally and saves their reading order.</p></section>
 <section class="add"><form id="add-form"><div class="field"><label for="folder">Manga folder</label><input id="folder" name="folder" placeholder="manga/MyManga" required><small>Inside this repo, with one folder per chapter and numbered page images.</small></div><div class="field direction"><label for="direction">Reading direction</label><select id="direction" name="direction"><option value="rtl">Right to left ←</option><option value="ltr">Left to right →</option></select></div><button type="submit">Add manga <span>＋</span></button></form></section>
 <p id="model-status" role="status"></p>
 <p id="notice" role="status" aria-live="polite"></p>

@@ -1,140 +1,76 @@
-# Manga Recap — Stage 1
+# Manga Recap
 
-Local FastAPI backend, plain HTML/JavaScript Library, and JSON files on disk. All source was built inside this repository; model code and weights come from the official public Magi v3 source.
+A local FastAPI app that turns chapter images into narrated recap videos. Use any registered manga and chapter; no Codex session is needed to operate the app. Python, plain HTML/JavaScript, JSON on disk, free local tools. An external image-capable AI writes narration through manual export/import. Edge TTS sends narration to Microsoft's online service and needs internet; detection, editing and rendering run locally.
 
 ## Run
+
+From this repository:
 
 ```sh
 ./run.sh
 ```
 
-Open http://127.0.0.1:8000. Stop the server with Ctrl+C.
+On Windows, run `run.bat` from Command Prompt or `.\run.bat` from PowerShell after creating `.venv` and installing `requirements.txt`. The Windows virtual environment uses `.venv\Scripts\python.exe`; macOS uses `.venv/bin/python`.
 
-**Stage 1 is approved. Only the registered manga’s Chapter 1 and Chapter 12 are authorized for processing.** The API, Library controls and worker enforce this chapter restriction. All other chapters remain disabled.
+Open <http://127.0.0.1:8000/>. Dependencies live in this repo's `.venv`; FFmpeg and ffprobe must be available. To install from scratch, create `.venv`, install `requirements.txt`, and run `scripts/install_model.py` with that environment. The downloader installs the pinned official `ragavsachdeva/magiv3` model, revision `49c73a225122d53adbaa26d53868be81a57706e2`, into `vendor/magiv3`. Detection also requires a successful model-validation record; the existing installation already has one. Historical smoke/validation scripts remain in `scripts/`.
 
-## Library
+## Portable local storage
 
-Put manga inside this repo, for example:
+Downloads always live inside **your clone**, at `manga/<manga>/<chapter>/001.jpg` (or PNG/WebP), regardless of where you cloned it or your operating system. The app resolves this location from its own source files, not the terminal working directory. Saved job paths are relative, so moving the whole repository with its local data keeps downloads resumable. `manga/`, `data/`, `outputs/` and `.venv` are ignored by Git: pushing source code does not upload local manga, job state or media. A fresh clone starts without those local files and creates download folders when needed.
 
-```
-manga/MyManga/Chapter001/001.png
-manga/MyManga/Chapter001/002.png
-```
+## Stage 1 Downloader
 
-Enter `manga/MyManga` and select right-to-left or left-to-right reading order. Folder paths outside this repo are rejected. Adding manga does not start processing. No bulk manga run is available in this stage.
+The home page is now **Stage 1: Downloader**, using the approved dark glass palette. The existing pipeline is preserved at `/library`. Paste a MangaPill or WeebCentral **series URL**, load its chapters, select individual chapters or a range of list positions, and click **Download selected**. Only the selected images download; no panel detection is started.
 
-The background worker processes one page at a time. It writes JSON atomically, skips existing valid page outputs, and preserves completed results across a stop. Interrupted jobs appear paused after a server restart. Existing invalid JSON is flagged and does not count as complete. One server and one background chapter worker run at a time.
+The app discovers selected page lists before showing determinate page progress. The bar counts verified images, with per-chapter totals and exact failed-page reasons. Up to three images transfer concurrently, with three attempts each. Images retain their actual PNG/JPEG/WebP format and are named `001`, `002`, etc. under source-specific manga and chapter folders inside `manga/`.
 
-## Detection and validity
+**Stop download** preserves completed images. **Recent downloads → Resume / retry** re-fetches the current image lists, verifies saved hashes, skips intact files, and retries incomplete/corrupt pages. Restarted server jobs become paused and resume only when requested. A changed source page order stops that chapter rather than silently reusing mismatched pages. Temporary files and atomic JSON records protect interrupted writes; chapter ownership prevents jobs from writing over each other.
 
-Official model: https://huggingface.co/ragavsachdeva/magiv3
+Source adapters are independent Python implementations in this repo. They use HTTPX and the standard HTML parser, without a browser engine or paid service. Current public-site access can change; blocked/changed source responses are reported explicitly. No PDF/CBZ conversion.
 
-Pinned revision: `49c73a225122d53adbaa26d53868be81a57706e2`.
+## Daily workflow
 
-Use Magi v3's normal detection prompt and unconstrained decoding with the official three-beam settings. Parse its labeled output and retain only boxes with the exact `<panel>` label. All other detections are immediately discarded and never persisted, drawn, or used. There is no forced panel-only decoding. The combined upstream detection-and-association helper is not called: only its detection generation step is used, with no OCR, character grounding, speaker guesses, or association pass.
+1. Put manga inside this repo: `manga/MyManga/<chapter folders>/<page images>`. Natural filename sorting supports numbered images and names such as `page_001.jpg`. Keep a chapter's files stable after importing its narration. Add the manga in Library and select right-to-left or left-to-right reading direction.
+2. Click **Process chapter**. Detection runs in a background worker, one page at a time. It skips valid existing JSONs and keeps the Mac awake. Stop/resume preserves completed results. Only panel detections are retained; text/character detections are discarded. No OCR or character associations run.
+3. Click **Prepare panels**, then **Review panels**. Preparation preserves existing manual fixes. Review significant geometry/order mistakes. Crop padding, labeled copies and review flags follow the project rules. Failed detector pages may become flagged whole-page panels for review; invalid detections never become valid Stage 1 JSONs.
+4. Click **Export & import narration**. For each batch (at most 20 pages), download the ZIP and its current prompt. Extract the ZIP. **Start a fresh AI chat**, attach those labeled images and send the entire prompt together. Do not rely on any previous chat.
+5. Paste the AI JSON into the selected batch and click **Validate & import**. The receipt identifies the manga, chapter, batch, page revisions and prior context. IDs may repeat in another chapter, but a receipt cannot be reused there. Errors offer targeted corrections without changing a valid saved import. New replies include selected story beats, exact phrase anchors, cast, continuity, a chapter summary and durable memory updates. Imports made with the older format remain readable.
+6. Open **Audio** and generate speech. New manga default to Andrew at 1.2× with brief 180 ms period pauses; existing saved pacing stays intact. New imports with phrase anchors capture actual Edge TTS word timestamps and obtain phrase-aligned cuts automatically. Empty narration stays silent. Listen and regenerate individual beats if needed. Existing clips survive failed regeneration.
+7. Open **Video**. Preview and adjust switch times, save and render an MP4. Existing imported narration without anchors can use equal/manual timing or the phrase-map editor. Applying saved maps explicitly generates timestamped speech and rebuilds that chapter. The sharp unstretched panel, blurred background, shadow, smooth zooms/slides and short crossfades are shared across chapters.
 
-The official Magi geometric sorter orders retained panels. For LTR, coordinates are mirrored for sorting only; output coordinates stay in the original image space. A page is valid only when:
+No chapters are processed automatically. One heavy detection, speech, alignment or video job runs at a time across Library. Folder discovery does not authorize a background run.
 
-- It has at least one panel.
-- Every box has finite coordinates and lies inside the original page bounds with positive width and height.
-- Every box covers at least 1% of the original page area.
+## Story context without an endless chat
 
-A failure flags the entire page, rather than silently removing, clipping, or relabeling a box. Flagged pages are included in the report and produce no valid page JSON. Every processed page receives a red-box preview; existing valid JSONs are reused and any missing preview is regenerated from its saved panel boxes. The same gate is applied when saving, resuming, and counting Library progress.
+The app stores memory per manga, with separate original imports for each chapter and batch. Narration begins with whichever chapter you import first. Subsequent participating chapters follow the natural chapter-folder order; earlier included chapters must have valid imports. Merely downloading more chapter folders does not enroll them into the story.
 
-Valid output: `outputs/<manga-id>/<chapter>/<page-name>.json`. Only panel coordinates are saved, as `[x1, y1, x2, y2]`, with one-based reading order. Model identity, original page dimensions, reading direction, device and timing are also recorded.
+Each batch prompt carries only **preceding valid history**:
 
-Apple Silicon uses MPS float16; other machines use CPU float32. Batch size is one and CPU threads are limited to two. The model has approximately 833 million parameters and 1.7 GB of weights. The model card permits personal and non-commercial use; see its license for other usage.
+- Imported cast available before that batch.
+- Relevant confirmed memory facts and separately labeled uncertain claims, with chapter/batch/panel provenance.
+- Original recent chapter summaries and short excerpts of older chapter summaries.
+- The latest continuity/open threads and the previous narration ending.
+- The exact current panel manifest and a batch receipt.
 
-## Approved chapter processing
+The context packet is capped at **18,000 characters** (the narration master and current ID manifest are separate). It selects facts by relevance to the recent story and recency, bounds cast and summaries, and reports omitted counts. It does not repeatedly rewrite one giant summary. Full original summaries, memory and previous import revisions remain on disk even when omitted from a prompt. This is bounded context, not a guarantee that every distant detail reaches the AI. Factual correctness still requires human review.
 
-`app/worker.py` saves red panel boxes numbered in reading order for every page in each approved chapter. It runs `caffeinate -i -w <worker-pid>` on macOS to prevent idle sleep while processing. The assertion ends when that worker finishes or stops; no persistent power setting is changed.
+Open **Story memory** from a manga's Library card to search all saved chapter history, review uncertainty, and correct summaries, facts or cast. Imported facts explicitly marked uncertain stay separate; facts supported by panels with an `unsure` annotation are conservatively treated as uncertain. A human can correct their status in memory review. The code cannot prove the truth of an AI's prose.
 
-Chapter reports live in `outputs/<manga-id>/<chapter>/_report.json`; page previews live in the same chapter’s `previews/` folder. Library shows valid page progress, flagged pages, current page and whether the Mac is kept awake. Only one chapter runs at a time. The fixed controller `scripts/run_approved_chapters.py` processes Chapter 12 then Chapter 1 through the live Library API and saves `reports/approved-chapters.json`.
+Edits to earlier narration, panels or memory invalidate dependent later imports. Saved later narration/media remain on disk, but the app blocks using stale imports until replies are refreshed against current context. New manga never inherit another manga's cast or memory. Later chapters never leak into prompts for earlier chapters.
 
-The per-chapter average uses saved detection times for all evaluated pages, including cached valid pages and flagged pages. Total time measures wall time for the current run, including model loading and preview saving; reused pages are listed separately, so their prior inference time is not counted again in current wall time. Total panels counts panels on valid pages. Flagged results remain listed separately.
+## Local storage and compatibility
 
-## Previous six-page review
+- `data/library.json`: registered manga and reading directions.
+- `data/manga/<id>/narration.json`: canonical imports, chapter summaries, sourced memory and retained earlier revisions; atomically saved with cast/continuity.
+- `outputs/<id>/<chapter>/`: detector JSONs/previews, Stage 2 crops/labeled pages, Stage 3 exports/audio and Stage 5 timings/video/alignment.
+- Existing Chapter 1 assets remain at their original paths and keep their original hashes. Python helper defaults and its old MP4 basename remain for compatibility; web requests always pass the selected manga/chapter explicitly.
 
-The fixed-scope test script is `scripts/test_chapter12.py`. It reads only Chapter 12 pages `001.png` through `006.png` from the registered manga, generates normal detections, saves valid panel-only JSON, and saves red panel boxes numbered in reading order under the chapter's `previews/` directory. It cannot expand its page range through command-line arguments. The original benchmark keeps processing disabled; the subsequently approved two-chapter run uses the separate controller above.
+Manga, local state, generated media, model weights, caches, `.env` and virtual environments are ignored by Git. Small source files and JSON verification reports can be committed. Nothing reads or imports another project on this computer.
 
-Report: `reports/chapter12-retest.json`. Its `pages` list records time and retained panel count per page, and its `flagged` list records any sanity-check failures. Page times include image loading, model inference, filtering and ordering; they exclude preview rendering and JSON writing. Model loading and total wall time are reported separately. The previous failed experiment is documented in `reports/chapter12-validation.json`; its mixed-category coordinate files were removed.
-
-## Fresh setup
-
-Use Python 3.11 inside this repo:
+## Validation
 
 ```sh
-python3.11 -m venv .venv
-.venv/bin/python -m pip install --no-cache-dir -r requirements.lock.txt
-.venv/bin/python scripts/install_model.py
+.venv/bin/python -m unittest discover -s tests -q
 ```
 
-Model files and caches stay inside this repo. `.venv/`, `.cache/`, `vendor/`, manga images, previews, outputs, library state and `.env` are excluded from git.
-
-Tests: `.venv/bin/python -m unittest discover -s tests -v`.
-
-## Stage 2 — Review panels
-
-Stage 2 reads saved panel JSON only for Chapter 1 and Chapter 12. No model inference is run. Use each chapter's **Review panels** link in Library. The contact sheet shows every whole page with large IDs, places flagged pages first, and lists every flag reason.
-
-Each panel crop is named `p003-1.png`, `p003-2.png`, and so on, in reading order. Padding is 1% of that panel's width/height on each side, clamped to original page edges, with integer pixel edges rounded outward. Crops, labeled whole pages and thumbnails are stored under `outputs/<manga-id>/<chapter>/stage2/<page-id>/<revision>/`. The adjacent `page.json` identifies the active assets and stores Stage 2 fixes; Stage 1 JSONs remain unchanged.
-
-In **Edit panels**, use the up/down buttons to reorder, select a box and drag a blue corner (or edit pixel coordinates) to resize, delete the selected box, or choose **Draw box** and drag on the page. **Save fixes & regenerate** saves the current reading order and regenerates only that page's crops/labeled image. A concurrent edit from another tab is rejected instead of overwriting newer fixes. Old crop sets are retired after a complete new set is committed.
-
-Pages are flagged if a box covers at least 90% of the page with other boxes, two boxes actually intersect and the intersection width exceeds 5% of page width **and** its height exceeds 5% of page height, a box's width/height is under 10% of the respective page dimension, a box's area is under 3%, or the page is a spread. The overlap rule requires both dimensions to exceed 5%; touching boxes, shared edges and thin strips are not flagged. Zero-panel pages receive a whole-page panel and a flag. Flags are recalculated after each save; they are review prompts and do not prevent cropping or saving valid in-bounds geometry.
-
-Reports: each chapter's `stage2/_report.json`; initial combined summary and flagged reasons in `reports/stage2-panels.json`. Chapter reports update after fixes. Initial preparation is `.venv/bin/python scripts/prepare_stage2.py`; existing Stage 2 fixes are preserved when preparation is rerun.
-
-## Revised Stage 3 — Continuous story beats (Chapter 1 only)
-
-Open Chapter 1's **Export & import narration** link in Library. Existing labeled-page ZIPs stay unchanged: pages 001–020 (80 available IDs), and pages 021–037 (70 available IDs). No new detection, cropping or labeling is run.
-
-Download the selected batch's fresh prompt. It contains the updated master, that batch's exact valid-ID manifest, the saved cast, the previous narration's last three beats, and the preceding imported continuity summary/open_threads. Batch 2's prompt becomes available after importing Batch 1. A chapter or batch ending does not trigger an ending to the story. Only the explicit **final batch of my entire recap** checkbox permits a grounded closing; leave it off for ordinary uploads. Select it before downloading the prompt.
-
-Reply format:
-
-```json
-{
-  "cast": [],
-  "beats": [
-    {"panel_ids": ["p003-1", "p003-2"], "narration": "A connected story beat.", "unsure": ""}
-  ],
-  "continuity": {"summary": "Factual context to carry forward.", "open_threads": []}
-}
-```
-
-Example IDs are illustrative, not an allowed-ID list. Selected IDs must actually occur in the batch manifest, cannot repeat, and must follow reading order within/across beats. Skipped IDs are allowed and counted in the UI. At least one beat and one selected ID are required. The narration budget scales at 40 words per selected ID in a beat; a two-panel beat allows 80 words. Legacy panel-by-panel replies are rejected with a format explanation.
-
-The prompt forbids invented IDs, story events, dialogue, thoughts, motives, relationships and names, and asks for omission or uncertainty when evidence is unclear. Structural validation enforces IDs, ordering and schema; it cannot establish factual accuracy or natural writing. Those still need human review of a real AI reply.
-
-On failure, the exact offending IDs/beat numbers and a copyable redo request appear. Partial corrections identify the affected current draft beat with `replace_beat`; unaffected beats are retained. To drop an affected beat, return its replace_beat with an empty panel_ids array and empty narration. Cast/continuity-only corrections use an empty beats array. The combined result is revalidated before any saved story data changes. You can uncheck **Corrections only** to submit a full replacement reply instead.
-
-Successful imports atomically save beats, cast, continuity and the final-recap choice in `data/manga/<manga-id>/narration.json`. Chapter beats are assembled in batch order. Changing earlier narration makes dependent batch replies stale, so they must be regenerated with fresh continuity. Previous context never comes from a future batch. Imported badges show beat/selected/skipped counts.
-
-`reports/stage3-beats-test.json` records controlled structural tests against Batch 1's actual 80-ID manifest, performed in temporary storage inside this repo. No test narration is saved to the actual manga. The `scripts/test_stage3_batch1.py` test never reads/processes images or another chapter. Per-batch generated prompts are under `outputs/<manga-id>/Chapter 1/stage3/prompts/<batch-id>/narration_prompt.md`.
-
-Stage 4: Chapter 1 narration audio
---------------------------------
-From Chapter 1's narration page, choose “Listen & generate audio”. Generate missing audio, listen to individual beats or in sequence, and regenerate any individual beat. Uses Edge TTS 7.3.1 with the English (US) Andrew Multilingual narrator at normal speed, using FFmpeg and lightweight PCM trimming to shorten detected quiet gaps longer than 200 ms to approximately 100 ms. Internet is required: narration text goes to Microsoft's online speech service. Generated MP3s and their JSON manifest stay under the chapter's ignored stage3/audio directory. No images, cast metadata, or other chapters are sent. Completed clips are reused on retry; changed narration requires fresh audio. Empty narration remains silent. Run with `./run.sh`.
-
-Stage 5: Chapter 1 video
------------------------
-From the audio page choose “Preview & export video”. Each beat initially divides its decoded audio duration equally among its selected panel crops. Play from a selected beat, scrub the audio, edit the switch times in seconds from that beat's start, and save. Switches must increase and allow at least one frame per panel. Reset a beat to equal timing and save to undo manual timing. Silent narration beats, if present, default to two seconds.
-
-Render MP4 produces a local 1280×720, 24 fps H.264/AAC video with simple cuts and black borders where needed, using installed FFmpeg/ffprobe with two encoding threads. Download it or watch the finished MP4 on the page. Cuts are quantized to video frames. Decoded audio sample durations prevent accumulated MP3 padding gaps. Changing timing, audio revisions, narration or panel revisions makes the export outdated. Only current versions can be downloaded. Stage 5 outputs and timing JSON stay under the ignored Chapter 1/stage5 directory. Existing source crops and narration audio are not modified. Run with `./run.sh`.
-
-Sentence / phrase alignment — Chapter 1
---------------------------------------
-All 30 beats use reviewed exact phrase maps and real Edge TTS word timestamps with the same frozen script, Andrew Multilingual voice and short-pause profile. Each selected panel starts on an exact, unique phrase in narration order. The pause trimmer records removed sample intervals and shifts word times accordingly. Missing or mismatched word metadata fails rather than falling back to guessed cuts. The app validates references and timing; image/phrase meaning still needs human review.
-
-The approved chapter run reuses cached timestamped previews and generates remaining clips sequentially. It renders and validates the complete replacement before publishing new audio and phrase timing, retaining the previous MP4. Failed runs preserve completed samples for resumption. No other chapters or source crops are processed. Files stay in the ignored Chapter 1/stage5/alignment directory and the existing local audio directory.
-
-The video page plays and downloads the current phrase-aligned chapter and retains manual timing adjustments. Its phrase section shows exact anchors and word-based cut times for each beat. Four original examples (beats 6, 10, 19 and 25) remain together at `/alignment-examples/<manga-id>/Chapter%201`; these isolated clips can be regenerated separately. Phrase maps can be edited or imported using the alignment-only prompt, without changing narration. Run the app with `./run.sh`.
-
-Chapter 1 speech pacing: the approved setting is 1.2× (`+20%` Edge TTS rate), with approximately 180 ms of measured silence after periods; other long quiet gaps still keep 100 ms. Speech is regenerated at this rate with real word timestamps, then pauses are trimmed or padded at measured quiet gaps. Both silence removal and insertion shift the panel cues. Settings are saved locally in the audio directory's `pacing.json`; individual beat regeneration retains them, and clips at different saved pacing are treated as stale. The script and Andrew voice are unchanged. The video and audio pages display the active speed and period-pause setting.
-
-Chapter 1 background: preview and MP4 use the same cached 1280×720 composition. The current panel covers the background, blurred and dimmed; an unstretched sharp copy sits centrally at up to 92% of the canvas with a soft shadow and subtle edge. The background changes on the same cut as the foreground. Changing visual settings invalidates the MP4 and frame cache, preserving saved phrase timing and audio. Existing beat previews can be restyled from their saved audio and word timestamps without TTS.
-
-Chapter 1 motion: panels cycle through slow zoom-in, zoom-out, slide-from-left and slide-from-right movements. The existing composed panel and blurred background move together as a gentle camera move. Zoom is capped at 6.5%; slide framing at 3.8%, with less movement for short holds so the entire sharp panel stays visible. The live preview follows the audio clock, freezing on pause and updating on seek. FFmpeg repeats each still without moving its crop, then applies cubic fractional-pixel affine sampling to avoid pixel-snapping jitter. Cumulative 24 fps cut rounding avoids timing drift. Regression tests track an edge through every frame of all four slow camera moves. Motion settings invalidate video exports without changing saved timing or audio. No speech generation is needed.
-
-Chapter 1 panel transitions use four-frame crossfades beginning at each saved switch, including beat boundaries. Short holds shorten the dissolve. A frozen outgoing frame blends over the incoming panel without shifting cuts, overlapping audio or shortening the chapter. The live preview follows the same audio clock. The renderer buffers at most four history frames per branch and bypasses blending outside transitions.
+Tests use isolated synthetic manga inside this repository and mocked speech/model responses. They include real FFmpeg exports, multi-manga/chapter isolation, 80-chapter bounded context, stale dependency rejection, fresh-chat receipts, uncertainty, memory editing/search, filename ordering and imported phrase anchors. They do not process real additional manga or call online speech services.

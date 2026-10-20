@@ -1,6 +1,31 @@
+# Local storage and platform requirements
+
+- Support macOS and Windows. Save downloaded images inside the current cloned repository under `manga/`, and download state under `data/`. Resolve paths from the repository location, never a hardcoded user/home/drive path. Keep both directories ignored by Git; do not push downloaded or generated files.
+
+# Current approved build: Stage 1 Downloader
+
+- Build the approved downloader for MangaPill and WeebCentral only, with chapter selection, verified image downloads, persistent safe stop/resume and accurate page progress. Use the dark glass palette. No PDF/CBZ, no automatic panel detection, no other pipeline changes. Preserve the existing library and media. Show the result and one run command, then stop.
+- Gento was explicitly authorized as a read-only reference for the prior architecture study. Implement this downloader independently inside this repository; do not import or execute the reference project.
+
+# Current direction: user-led rebuild and design standard
+
+- The approved sidebar appearance is dark glass: Onyx and Graphite surfaces, Pearl Aqua accents, Snow text, minimal decoration. Do not switch it to a light/Snow surface.
+
+- Follow the user's next steps individually. The existing app is still being rebuilt; do not initiate further workflow changes, additions, removals or a broad redesign without the user's specified step.
+- Before adding or changing any UI, assess placement, consistency with existing controls, hierarchy, responsive layout and enabled/click behavior. Apply only a coherent design; do not append controls without considering their surrounding layout.
+- All new or redesigned UI must use Apple-inspired glassmorphism: translucent glass surfaces, restrained blur, subtle highlights, layered depth and readable contrast. Keep effects lightweight for a weak laptop and use plain HTML/CSS/JS.
+- Use the user's palette: Onyx `#131515`, Graphite `#2b2c28`, Verdigris `#339989`, Pearl Aqua `#7de2d1`, Snow `#fffafb`. Derive transparent surface treatments from these colors; do not substitute another palette.
+
+# Previously approved stage: generic workflow and persistent story context
+
+The user explicitly approved making this app generic for daily use across manga and chapters, with persistent story memory and fresh AI chats. This supersedes the historical manga/chapter/beat allowlists below. Preserve existing user work and media. Do not automatically process additional manga, run detection, call TTS or regenerate existing videos as part of this upgrade. Allow these actions through explicit UI controls for any registered chapter. Keep every input inside this repo, free tooling, panel-only detection, plain HTML/JS, FastAPI and JSON storage. Keep each manga/chapter's assets and tasks isolated. Save original batch/chapter memory with provenance, carry only preceding valid history, keep uncertainty explicit, bound prompt context, and invalidate dependent imports after upstream changes. Show the completed UI and one run command, then stop. No automatic commit or push.
+
+## Historical approved stages (scope restrictions superseded above)
+
 # Project Rules
 
 - This project is a local web app that turns manga chapters into recap videos.
+- Always open this project's web app in an external browser. Never open it in the Codex in-app browser, including for previews or UI verification.
 - Build everything from scratch inside this repo. Do NOT read, open, copy or import anything from any other folder or project on this computer, including old Rune or Magi project folders.
 - The plan is fixed. Work in stages. Do ONLY the stage the user gives you, then stop, show what you built, give the user one command to run it, and wait for their approval. If you think a stage should change, tell the user and wait. Never change the plan yourself.
 - Use only free tools. Run on a weak laptop. Python backend (FastAPI), plain HTML/JS frontend, no heavy frameworks. Store data as JSON files on disk. The app runs at 127.0.0.1.

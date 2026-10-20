@@ -1,6 +1,6 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chapter 1 video · Manga Recap</title><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/video.css?v=transitions-1"><script src="/static/video.js?v=transitions-1" defer></script><script src="/static/alignment.js?v=pacing-1" defer></script></head>
-<body><main><header><div class="mark">M<span>R</span></div><div><p class="eyebrow">MANGA RECAP / STAGE 05</p><h1>Chapter 1 video</h1></div><a id="back" class="back">← Audio</a></header>
-<section class="intro"><h2>Preview &amp; panel timing</h2><p id="stats">Loading approved Chapter 1 audio and panels…</p><p>Chapter 1 uses spoken-phrase timing. Adjust switch times below if needed, then save. The script and Andrew voice stay unchanged. Current speed and period-pause settings appear above.</p></section>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chapter video · Manga Recap</title><link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/video.css?v=generic-1"><script src="/static/video.js?v=generic-1" defer></script><script src="/static/alignment.js?v=generic-1" defer></script></head>
+<body><main><header><div class="mark">M<span>R</span></div><div><p class="eyebrow">MANGA RECAP / STAGE 05</p><h1>Chapter video</h1></div><a id="back" class="back">← Audio</a></header>
+<section class="intro"><h2>Preview &amp; panel timing</h2><p id="stats">Loading chapter audio and panels…</p><p>This chapter uses its saved panel timing. Adjust switch times below if needed, then save. The script and Andrew voice stay unchanged. Current speed and period-pause settings appear above.</p></section>
 <p><a href="#phrase-alignment" id="trial-link">Review phrase alignment →</a></p>
 <p id="notice" role="status" aria-live="polite"></p><section class="editor">
 <label for="beat">Narration beat</label><select id="beat"></select>
@@ -11,17 +11,17 @@
 <div id="timings"></div><div class="actions"><button id="save">Save this beat's timing</button><button id="equal" class="secondary">Reset this beat to equal timing</button><span id="saved" role="status"></span></div>
 </section>
 <section id="phrase-alignment" class="editor">
-<p class="eyebrow">SENTENCE / PHRASE ALIGNMENT · CHAPTER 1</p><h2>Switch panels on the spoken phrase</h2>
-<p class="hint">The script is frozen. Each anchor says when a selected panel first appears. Andrew's real word timestamps determine the cut, corrected for the short pauses. Phrase alignment is approved for all 30 Chapter 1 beats. The four original examples remain available below.</p>
+<p class="eyebrow">SENTENCE / PHRASE ALIGNMENT · THIS CHAPTER</p><h2>Switch panels on the spoken phrase</h2>
+<p class="hint">The script is frozen. Each anchor says when a selected panel first appears. Andrew's real word timestamps determine the cut, corrected for the short pauses. Use exact phrase anchors to align this chapter. Saved beat previews are available below.</p>
 <p><a id="alignment-examples-link" class="download">Watch all alignment examples →</a></p><p id="alignment-scope"></p><details id="alignment-map-details"><summary>Edit phrase map / AI prompt</summary><details><summary>Existing script · keep every word unchanged</summary><p id="alignment-script"></p></details>
 <div class="actions"><a id="alignment-prompt" class="download" download>Download alignment prompt</a></div>
 <p class="hint">For another mapping, send the prompt with the corresponding labeled page images to your AI. Paste its alignment-only JSON below. You can also edit the exact phrases yourself. Each phrase must occur once in the script; panels and phrases stay in order.</p>
 <label for="alignment-reply">Phrase map JSON</label><textarea id="alignment-reply" spellcheck="false"></textarea>
 <div class="actions"><button id="alignment-save">Validate &amp; save phrase map</button></div></details>
-<div class="actions"><button id="alignment-play" disabled>Play aligned trial</button><button id="alignment-generate" class="secondary" disabled>Generate beat 6 trial</button></div>
-<p id="alignment-message" role="status" aria-live="polite"></p><ul id="alignment-errors"></ul><div id="alignment-table"></div>
+<div class="actions"><button id="alignment-play" disabled>Play aligned trial</button><button id="alignment-generate" class="secondary" disabled>Generate selected beat preview</button></div>
+<p class="hint">New imports with phrase anchors receive word-timed cuts when you generate audio. For edited or older phrase maps, the button below generates timestamped speech and rebuilds this chapter using the saved maps.</p><button id="alignment-chapter">Apply saved phrase maps &amp; rebuild chapter</button><p id="chapter-alignment-job" role="status"></p><p id="alignment-message" role="status" aria-live="polite"></p><ul id="alignment-errors"></ul><div id="alignment-table"></div>
 <p id="alignment-summary"></p><video id="alignment-video" controls preload="metadata" hidden></video><a id="alignment-download" class="download" hidden download>Download this beat's trial MP4</a>
 <p class="hint">The player above shows a separate beat preview. The full phrase-aligned chapter is in Export MP4 below.</p>
 </section>
-<section class="export"><h2>Export MP4</h2><p>1280 × 720 · 24 fps · brief crossfades · gentle zooms and left/right slides · sharp panels over a blurred background with a soft shadow.</p><p id="export-pacing" class="hint"></p><div class="actions"><button id="render">Render MP4</button><a id="download" class="download" hidden download>Download Chapter 1 MP4</a></div><progress id="progress" value="0" max="1"></progress><p id="job" role="status" aria-live="polite"></p><video id="result" controls preload="metadata" hidden></video></section>
+<section class="export"><h2>Export MP4</h2><p>1280 × 720 · 24 fps · brief crossfades · gentle zooms and left/right slides · sharp panels over a blurred background with a soft shadow.</p><p id="export-pacing" class="hint"></p><div class="actions"><button id="render">Render MP4</button><a id="download" class="download" hidden download>Download this chapter MP4</a></div><progress id="progress" value="0" max="1"></progress><p id="job" role="status" aria-live="polite"></p><video id="result" controls preload="metadata" hidden></video></section>
 </main></body></html>

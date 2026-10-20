@@ -219,6 +219,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Local-only storage in every clone (macOS and Windows). Never commit downloads.
+# Paths are relative to this repository, not a user-specific home folder.
 # Local manga recap inputs, results, models and state
 manga/
 outputs/

@@ -55,11 +55,11 @@ class VideoTests(unittest.TestCase):
         self.source.stop()
         try:
             c=TestClient(main.app)
-            self.assertEqual(c.get('/video/test/Chapter%2012').status_code,403)
-            self.assertEqual(c.get('/api/video/test/Chapter%2012').status_code,403)
-            self.assertEqual(c.post('/api/video/test/Chapter%2012/timing',json={'source_token':'a'*64,'number':1,'switches':[]}).status_code,403)
-            self.assertEqual(c.post('/api/video/test/Chapter%2012/export',json={'render_token':'a'*64}).status_code,403)
-            self.assertEqual(c.get('/api/video/test/Chapter%2012/mp4?token='+'a'*64).status_code,403)
+            self.assertEqual(c.get('/video/test/Chapter%2012').status_code,404)
+            self.assertEqual(c.get('/api/video/test/Chapter%2012').status_code,404)
+            self.assertEqual(c.post('/api/video/test/Chapter%2012/timing',json={'source_token':'a'*64,'number':1,'switches':[]}).status_code,404)
+            self.assertEqual(c.post('/api/video/test/Chapter%2012/export',json={'render_token':'a'*64}).status_code,404)
+            self.assertEqual(c.get('/api/video/test/Chapter%2012/mp4?token='+'a'*64).status_code,404)
         finally:self.source.start()
 
     def test_real_mp4_switches_and_audio_stream(self):
@@ -128,7 +128,7 @@ class VideoTests(unittest.TestCase):
         self.assertEqual(c.get(base,params=dict(params,revision='old')).status_code,404)
         self.assertEqual(c.get(base,params=dict(params,style='old')).status_code,409)
         self.source.stop()
-        try:self.assertEqual(c.get('/api/video/test/Chapter%2012/frame',params=params).status_code,403)
+        try:self.assertEqual(c.get('/api/video/test/Chapter%2012/frame',params=params).status_code,404)
         finally:self.source.start()
 
     def test_motion_uses_cumulative_cut_frames_without_drift(self):

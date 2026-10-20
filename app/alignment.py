@@ -1,4 +1,5 @@
-"""Exact phrase anchors and real speech timestamps for Chapter 1."""
+"""Exact phrase anchors and real speech timestamps for any registered chapter."""
+from app.tasks import lock as task_lock, ensure_idle
 import asyncio
 import json
 import math
@@ -12,14 +13,15 @@ import uuid
 
 from app import audio, video, storage
 
-TRIAL_BEAT = 6
-TRIAL_BEATS = (6, 10, 19, 25)  # Original approved isolated examples.
 lock = threading.RLock()
 jobs = {}
 
+def job_key(mid, chapter):
+    return mid if chapter=='Chapter 1' else (mid,chapter)
 
-def root(mid):
-    return video.root(mid)/'alignment'
+
+def root(mid, chapter='Chapter 1'):
+    return video.root(mid, chapter)/'alignment'
 
 
 def context(mid, chapter, number):
@@ -64,9 +66,15 @@ def validate_map(beat, payload):
     return errors,normalized
 
 
-def read_map(mid, token, number):
-    saved=storage.read_json(root(mid)/f'beat-{number:03}-map.json')
-    return saved if saved and saved.get('source_token')==token else None
+def read_map(mid, token, number, chapter='Chapter 1'):
+    saved=storage.read_json(root(mid, chapter)/f'beat-{number:03}-map.json')
+    if saved and saved.get('source_token')==token:return saved
+    try:beat=next((b for b in audio.beats(mid,chapter) if b['number']==number),None)
+    except (FileNotFoundError,FileExistsError,ValueError):return None
+    if beat and beat.get('anchors'):
+        errors,anchors=validate_map(beat,{'beat':number,'anchors':beat['anchors']})
+        if not errors:return {'source_token':token,'beat':number,'anchors':anchors}
+    return None
 
 
 def save_map(mid,chapter,number,token,reply):
@@ -84,7 +92,7 @@ def save_map(mid,chapter,number,token,reply):
         errors,anchors=validate_map(beat,payload)
         if errors:return {'ok':False,'errors':errors}
         saved={'source_token':token,'beat':number,'anchors':anchors}
-        storage.write_json(root(mid)/f'beat-{number:03}-map.json',saved)
+        storage.write_json(root(mid, chapter)/f'beat-{number:03}-map.json',saved)
         return {'ok':True,'anchors':anchors}
 
 
@@ -138,7 +146,7 @@ def anchor_times(beat,anchors,words,duration):
         word=next((w for w in words if w['char_start']>=a['char_start'] and w['char_start']<a['char_end']),None)
         if word is None:raise ValueError(f'{a["panel_id"]}: phrase could not be located in timed speech.')
         rows.append(dict(a,start=0.0 if i==0 else word['start']))
-    video.validate_switches([r['start'] for r in rows[1:]],len(beat['panels']),duration)
+    video.validate_switches([r['start'] for r in rows[1:]],len(anchors),duration)
     for i,row in enumerate(rows):row['end']=rows[i+1]['start'] if i+1<len(rows) else duration
     return rows
 
@@ -184,31 +192,31 @@ def speech(text, target, pacing=None):
 
 def status(mid,chapter,number,pacing=None):
     with lock:
-        beat,token=context(mid,chapter,number);mapping=read_map(mid,token,number)
-        settings=audio.pacing(mid) if pacing is None else pacing
-        saved=storage.read_json(root(mid)/f'beat-{number:03}-trial.json')
+        beat,token=context(mid,chapter,number);mapping=read_map(mid,token,number,chapter)
+        settings=audio.pacing(mid, chapter) if pacing is None else pacing
+        saved=storage.read_json(root(mid, chapter)/f'beat-{number:03}-trial.json')
         ready=bool(saved and mapping and saved.get('trial_token')==trial_token(beat,token,mapping,settings))
         if ready:
             for kind in ('mp3','mp4'):
-                ready=ready and (root(mid)/saved['revision']/('trial.'+kind)).is_file()
+                ready=ready and (root(mid, chapter)/saved['revision']/('trial.'+kind)).is_file()
         return {'beat':number,'source_token':token,'script':beat['narration'],'panel_ids':beat['panel_ids'],
                 'anchors':mapping['anchors'] if mapping else [],'ready':ready,'trial':saved if ready else None,
-                'trial_allowed':number in TRIAL_BEATS,'trial_beat':TRIAL_BEAT,'trial_beats':list(TRIAL_BEATS),
-                'job':dict(jobs.get(mid,{'running':False,'message':f'Save a phrase map, then generate the selected approved trial (beats {", ".join(map(str,TRIAL_BEATS))}).'}))}
+                'trial_allowed':not beat.get('silent',False),
+                'job':dict(jobs.get(job_key(mid,chapter),{'running':False,'message':'Save a phrase map, then generate this beat preview.'}))}
 
 
 def run(mid,chapter,beat,token,mapping,pacing=None):
-    settings=audio.pacing(mid) if pacing is None else pacing
+    settings=audio.pacing(mid, chapter) if pacing is None else pacing
     try:
-        root(mid).mkdir(parents=True,exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix='trial-',dir=root(mid)) as name:
+        root(mid, chapter).mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='trial-',dir=root(mid, chapter)) as name:
             work=Path(name);mp3=work/'trial.mp3'
             spoken=speech(beat['narration'],mp3,settings)
             raw_duration=spoken['raw_duration'];duration=spoken['duration']
             words=spoken['words'];removed=spoken['removed_silence']
             rows=anchor_times(beat,mapping['anchors'],words,duration)
             sample=dict(beat,_audio=str(mp3),duration=duration,switches=[r['start'] for r in rows[1:]])
-            with lock:jobs[mid]['message']='Rendering the single-beat phrase-aligned preview…'
+            with lock:jobs[job_key(mid,chapter)]['message']='Rendering the single-beat phrase-aligned preview…'
             video.render_to({'beats':[sample],'duration':duration},work)
             revision=uuid.uuid4().hex
             result={'revision':revision,'trial_token':trial_token(beat,token,mapping,settings),'beat':beat['number'],
@@ -218,38 +226,38 @@ def run(mid,chapter,beat,token,mapping,pacing=None):
                     'anchors':rows,'equal_switches':[duration*i/len(rows) for i in range(1,len(rows))]}
             with lock:
                 current,newtoken=context(mid,chapter,beat['number'])
-                now=read_map(mid,newtoken,beat['number'])
+                now=read_map(mid,newtoken,beat['number'],chapter)
                 if not now or trial_token(current,newtoken,now,settings)!=result['trial_token']:
                     raise FileExistsError('Script, panels or phrase mapping changed during generation. Retry the current version.')
-                target=root(mid)/revision;target.mkdir()
+                target=root(mid, chapter)/revision;target.mkdir()
                 shutil.copyfile(mp3,target/'trial.mp3');shutil.copyfile(work/'chapter.mp4',target/'trial.mp4')
                 storage.write_json(target/'metadata.json',result)
-                storage.write_json(root(mid)/f'beat-{beat["number"]:03}-trial.json',result)
-                jobs[mid].update(message=f'Beat {beat["number"]} trial ready. The full chapter has not been regenerated.',error=False)
+                storage.write_json(root(mid, chapter)/f'beat-{beat["number"]:03}-trial.json',result)
+                jobs[job_key(mid,chapter)].update(message=f'Beat {beat["number"]} trial ready. The full chapter has not been regenerated.',error=False)
     except Exception as exc:
-        with lock:jobs[mid].update(message=f'Trial stopped: {exc}',error=True)
+        with lock:jobs[job_key(mid,chapter)].update(message=f'Trial stopped: {exc}',error=True)
     finally:
-        with lock:jobs[mid]['running']=False
+        with lock:jobs[job_key(mid,chapter)]['running']=False
 
 
 def start(mid,chapter,number,token):
-    with lock:
+    with task_lock, lock:
+        ensure_idle()
         beat,current=context(mid,chapter,number)
-        if number not in TRIAL_BEATS:raise PermissionError('Individual preview generation is available for beats 6, 10, 19 and 25. Use the approved chapter alignment run for all beats.')
         if current!=token:raise FileExistsError('Sources changed. Reload the phrase map.')
-        if jobs.get(mid,{}).get('running'):raise FileExistsError('An alignment trial is already running.')
-        mapping=read_map(mid,current,number)
+        if jobs.get(job_key(mid,chapter),{}).get('running'):raise FileExistsError('An alignment trial is already running.')
+        mapping=read_map(mid,current,number,chapter)
         if not mapping:raise ValueError('Save a valid phrase map first.')
-        jobs[mid]={'running':True,'message':f'Generating only beat {number} with word timestamps…','error':False}
+        jobs[job_key(mid,chapter)]={'running':True,'message':f'Generating only beat {number} with word timestamps…','error':False}
         threading.Thread(target=run,args=(mid,chapter,beat,current,mapping),daemon=True).start()
-        return dict(jobs[mid])
+        return dict(jobs[job_key(mid,chapter)])
 
 
 def asset(mid,chapter,number,revision,kind):
     state=status(mid,chapter,number)
     if kind not in ('mp3','mp4') or not state['ready'] or state['trial']['revision']!=revision:
         raise FileNotFoundError('Current alignment trial not found. Generate it first.')
-    return root(mid)/revision/('trial.'+kind)
+    return root(mid, chapter)/revision/('trial.'+kind)
 
 
 def refresh_preview_visuals(mid, chapter, number):
@@ -260,8 +268,8 @@ def refresh_preview_visuals(mid, chapter, number):
         saved=state['trial']
         if saved.get('visual_style')==video.VISUAL_STYLE and saved.get('motion_style')==video.MOTION_STYLE and saved.get('transition_style')==video.TRANSITION_STYLE:return saved
         beat,token=context(mid,chapter,number)
-        mp3=root(mid)/saved['revision']/'trial.mp3'
-    with tempfile.TemporaryDirectory(prefix='restyle-',dir=root(mid)) as name:
+        mp3=root(mid, chapter)/saved['revision']/'trial.mp3'
+    with tempfile.TemporaryDirectory(prefix='restyle-',dir=root(mid, chapter)) as name:
         work=Path(name)
         sample=dict(beat,_audio=str(mp3),duration=saved['duration'],switches=[a['start'] for a in saved['anchors'][1:]])
         video.render_to({'beats':[sample],'duration':saved['duration']},work)
@@ -270,18 +278,19 @@ def refresh_preview_visuals(mid, chapter, number):
             if not current['ready'] or current['trial']['revision']!=saved['revision'] or current['source_token']!=token:
                 raise FileExistsError('Preview sources changed during rendering.')
             result=dict(saved,revision=uuid.uuid4().hex,visual_style=dict(video.VISUAL_STYLE),motion_style=dict(video.MOTION_STYLE),transition_style=dict(video.TRANSITION_STYLE))
-            target=root(mid)/result['revision'];target.mkdir()
+            target=root(mid, chapter)/result['revision'];target.mkdir()
             shutil.copyfile(mp3,target/'trial.mp3')
             shutil.copyfile(work/'chapter.mp4',target/'trial.mp4')
             storage.write_json(target/'metadata.json',result)
-            storage.write_json(root(mid)/f'beat-{number:03}-trial.json',result)
+            storage.write_json(root(mid, chapter)/f'beat-{number:03}-trial.json',result)
             return result
 
 
 def apply_chapter(mid, chapter, pacing=None):
-    """Approved Chapter 1 run: resume cached clips, render, then publish together."""
-    original, source_token = video.source(mid, chapter)  # Enforces Chapter 1.
-    previous_pacing=audio.pacing(mid)
+    """Resume timestamped clips, render, then publish together."""
+    original, source_token = video.source(mid, chapter)
+    root(mid,chapter).mkdir(parents=True,exist_ok=True)
+    previous_pacing=audio.pacing(mid, chapter)
     settings=previous_pacing if pacing is None else pacing
     if (pacing is not None or settings) and settings not in ({'rate':'+20%','speed':1.2,'sentence_pause':.18}, {'rate':'+30%','speed':1.3,'sentence_pause':.18}):
         raise ValueError('Choose 1.2× or 1.3× with a 180 ms period pause.')
@@ -289,25 +298,29 @@ def apply_chapter(mid, chapter, pacing=None):
     mappings = []
     for beat in original:
         _, token = context(mid, chapter, beat['number'])
-        mapping = read_map(mid, token, beat['number'])
+        if beat.get('silent',False):
+            mappings.append((token,None));continue
+        mapping = read_map(mid, token, beat['number'], chapter)
         if not mapping:
             raise ValueError(f'Beat {beat["number"]}: save a current phrase map first.')
         mappings.append((token, mapping))
     planned = []
-    manifest = audio.manifest(mid)
+    manifest = audio.manifest(mid, chapter)
     for beat, (token, mapping) in zip(original, mappings):
         number = beat['number']
+        if beat.get('silent',False):
+            planned.append(dict(beat,switches=[beat['duration']*i/len(beat['panels']) for i in range(1,len(beat['panels']))]));continue
         print(f'Beat {number}/{len(original)}: checking timestamped audio', flush=True)
         if not status(mid, chapter, number, settings)['ready']:
-            jobs[mid] = {'running': True, 'message': f'Generating beat {number}', 'error': False}
+            jobs[job_key(mid,chapter)] = {'running': True, 'message': f'Generating beat {number}', 'error': False}
             run(mid, chapter, beat, token, mapping, settings)
         current = status(mid, chapter, number, settings)
         if not current['ready']:
             raise ValueError(current['job']['message'])
         trial = current['trial']
-        path = root(mid) / trial['revision'] / 'trial.mp3'
+        path = root(mid, chapter) / trial['revision'] / 'trial.mp3'
         filename = beat['token'] + '-aligned-' + trial['revision'] + '.mp3'
-        target = audio.root(mid) / filename
+        target = audio.root(mid, chapter) / filename
         shutil.copyfile(path, target)
         duration = len(video.pcm(target)) / 48000
         switches = [a['start'] for a in trial['anchors'][1:]]
@@ -318,31 +331,31 @@ def apply_chapter(mid, chapter, pacing=None):
         print(f'Beat {number}: ready, {duration:.2f}s, {len(beat["panels"])} panels', flush=True)
     token = video.digest([[b['token'], b['revision'], b['duration'],
                            [(p['id'], p['revision']) for p in b['panels']]] for b in planned])
-    state = {'source_token': token, 'beats': planned, 'duration': sum(b['duration'] for b in planned)}
+    state = {'chapter':chapter,'source_token': token, 'beats': planned, 'duration': sum(b['duration'] for b in planned)}
     state['render_token'] = video.render_token(token, planned)
-    print('Rendering complete phrase-aligned Chapter 1 MP4…', flush=True)
-    with tempfile.TemporaryDirectory(prefix='aligned-chapter-', dir=root(mid)) as name:
+    print('Rendering complete phrase-aligned chapter MP4…', flush=True)
+    with tempfile.TemporaryDirectory(prefix='aligned-chapter-', dir=root(mid, chapter)) as name:
         work = Path(name)
         video.render_to(state, work)
         with lock, video.lock, audio.lock:
-            if audio.pacing(mid) != previous_pacing:
+            if audio.pacing(mid, chapter) != previous_pacing:
                 raise FileExistsError('Speech pacing changed during rendering. Previous video retained.')
             if video.source(mid, chapter)[1] != source_token:
                 raise FileExistsError('Chapter sources changed during alignment. Previous video retained.')
             if storage.read_json(storage.DATA / 'manga' / mid / 'narration.json') != original_script:
                 raise FileExistsError('Narration changed during alignment. Previous video retained.')
             for beat, (map_token, mapping) in zip(original, mappings):
-                if read_map(mid, map_token, beat['number']) != mapping:
+                if not beat.get('silent',False) and read_map(mid, map_token, beat['number'], chapter) != mapping:
                     raise FileExistsError('Phrase map changed during alignment. Previous video retained.')
             updates = {
-                audio.root(mid)/'audio.json': manifest,
-                video.root(mid)/'timing.json': {'source_token': token, 'mode': 'phrase-aligned',
+                audio.root(mid, chapter)/'audio.json': manifest,
+                video.root(mid, chapter)/'timing.json': {'source_token': token, 'mode': 'phrase-aligned',
                     'switches': {str(b['number']): b['switches'] for b in planned}},
-                video.root(mid)/'export.json': {'render_token': state['render_token'], 'duration': state['duration'],
+                video.root(mid, chapter)/'export.json': {'render_token': state['render_token'], 'duration': state['duration'],
                     'width': video.WIDTH, 'height': video.HEIGHT, 'fps': video.FPS,
                     'panels': sum(len(b['panels']) for b in planned), 'alignment': 'phrase'},
             }
-            if settings:updates[audio.root(mid)/'pacing.json']=settings
+            if settings:updates[audio.root(mid, chapter)/'pacing.json']=settings
             previous = {p: storage.read_json(p) for p in updates}
             (work/'chapter.mp4').replace(video.export_path(mid, state))
             try:
@@ -356,7 +369,35 @@ def apply_chapter(mid, chapter, pacing=None):
               'duration': state['duration'], 'voice': audio.VOICE, 'pause_profile': audio.PAUSE_PROFILE, 'pacing':settings,
               'render_token': state['render_token'], 'file': str(video.export_path(mid, state)),
               'script_unchanged': True,
-              'notes': ['Beat 20 narration places the reaction after the blast; original script and panel order preserved.']}
-    storage.write_json(root(mid)/'chapter-alignment.json', report)
+              'notes': ['Original script and panel order preserved.']}
+    storage.write_json(root(mid, chapter)/'chapter-alignment.json', report)
     print(json.dumps(report, indent=2), flush=True)
     return report
+
+# Separate from per-beat trials: a whole-chapter job remains running between beats.
+chapter_jobs={}
+
+
+def chapter_status(mid,chapter):
+    return dict(chapter_jobs.get(job_key(mid,chapter),{'running':False,'message':'Save phrase maps for each spoken beat before rebuilding.'}))
+
+
+def start_chapter(mid,chapter,source_token):
+    with task_lock, lock:
+        ensure_idle()
+        original,current=video.source(mid,chapter)
+        if current!=source_token:raise FileExistsError('Chapter sources changed. Reload before rebuilding.')
+        if chapter_status(mid,chapter)['running'] or any(j.get('running') for j in jobs.values()):raise FileExistsError('An alignment job is already running.')
+        for beat in original:
+            if beat['silent']:continue
+            _,token=context(mid,chapter,beat['number'])
+            if not read_map(mid,token,beat['number'],chapter):raise ValueError(f'Beat {beat["number"]}: save a phrase map first.')
+        key=job_key(mid,chapter);chapter_jobs[key]={'running':True,'message':'Applying phrase maps; timestamped speech and video will be generated.','error':False}
+        def work():
+            try:
+                apply_chapter(mid,chapter)
+                chapter_jobs[key].update(message='Phrase-aligned audio and video ready.',error=False)
+            except Exception as exc:chapter_jobs[key].update(message=f'Alignment stopped: {exc}. Previous chapter audio and video retained.',error=True)
+            finally:chapter_jobs[key]['running']=False
+        threading.Thread(target=work,daemon=True).start()
+        return chapter_status(mid,chapter)

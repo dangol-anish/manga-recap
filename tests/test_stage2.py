@@ -105,9 +105,9 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual(self.client.get(page_url+'/image',params={'kind':kind,'revision':updated['revision']}).status_code,200)
         self.assertEqual(self.client.get(page_url+'/image',params={'kind':'crop','panel_id':'../../secrets'}).status_code,404)
         self.assertEqual(self.client.post(page_url,json={'revision':record['revision'],'boxes':[]}).status_code,409)
-        self.assertEqual(self.client.get('/api/review/test/Chapter%202').status_code,403)
-        self.assertEqual(self.client.get('/review/test/Chapter%202').status_code,403)
-        self.assertEqual(self.client.get('/api/review/another/Chapter%201').status_code,403)
+        self.assertEqual(self.client.get('/api/review/test/Chapter%202').status_code,404)
+        self.assertEqual(self.client.get('/review/test/Chapter%202').status_code,404)
+        self.assertEqual(self.client.get('/api/review/another/Chapter%201').status_code,404)
         self.assertEqual(self.client.get(url+'/999.png/image?kind=source').status_code,404)
 
 if __name__=='__main__':unittest.main()

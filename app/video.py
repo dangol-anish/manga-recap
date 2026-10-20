@@ -1,4 +1,5 @@
-"""Chapter 1 timing and local MP4 export from existing crops and approved audio."""
+"""Chapter timing and local MP4 export from existing crops and approved audio."""
+from app.tasks import lock as task_lock, ensure_idle
 from functools import lru_cache
 import hashlib
 import json
@@ -25,9 +26,12 @@ TRANSITION_STYLE = {'version': 1, 'kind': 'crossfade', 'frames': 4}
 lock = threading.RLock()
 jobs = {}
 
+def job_key(mid, chapter):
+    return mid if chapter=='Chapter 1' else (mid,chapter)
 
-def root(mid):
-    return storage.OUTPUTS / mid / 'Chapter 1' / 'stage5'
+
+def root(mid, chapter='Chapter 1'):
+    return storage.OUTPUTS / mid / chapter / 'stage5'
 
 
 def digest(value):
@@ -176,9 +180,9 @@ def decoded_duration(path, size, modified):
 
 
 def source(mid, chapter):
-    state = audio.status(mid, chapter)  # Chapter 1 + fresh imported narration only.
+    state = audio.status(mid, chapter)  # Fresh imported narration only.
     if state['ready'] != state['spoken']:
-        raise FileExistsError('Generate all current Chapter 1 audio before making a video.')
+        raise FileExistsError('Generate all current chapter audio before making a video.')
     manga, pages = narration.context(mid, chapter)
     panels = {}
     for page in pages:
@@ -195,6 +199,8 @@ def source(mid, chapter):
         if item['duration'] <= len(beat['panel_ids'])/FPS:
             raise ValueError(f'Beat {beat["number"]} is too short to show all selected panels.')
         item['_audio'] = str(path) if path else None
+        if beat.get('anchors'):item['anchors']=beat['anchors']
+        if beat.get('timing_anchors'):item['aligned_switches']=[a['start'] for a in beat['timing_anchors'][1:]]
         item['panels'] = []
         for pid in beat['panel_ids']:
             page, revision = panels[pid]
@@ -205,7 +211,7 @@ def source(mid, chapter):
             frame_url = f'/api/video/{quote(mid)}/{quote(chapter)}/frame?' + urlencode({'panel_id':pid,'revision':revision,'style':digest(VISUAL_STYLE)})
             item['panels'].append({'id':pid, 'revision':revision, 'url':url, 'frame_url':frame_url,
                                    'motion_kind':MOTION_STYLE['cycle'][panel_number%4],
-                                   '_crop':str(crop), '_frame':str(root(mid)/'frames'/(frame_key+'.png'))})
+                                   '_crop':str(crop), '_frame':str(root(mid, chapter)/'frames'/(frame_key+'.png'))})
             panel_number+=1
         result.append(item)
     token = digest([[b['token'], b['revision'], b['duration'], [(p['id'],p['revision']) for p in b['panels']]] for b in result])
@@ -225,16 +231,16 @@ def validate_switches(values, count, duration):
 
 def timeline(mid, chapter):
     current, token = source(mid, chapter)
-    saved = storage.read_json(root(mid)/'timing.json', {})
+    saved = storage.read_json(root(mid, chapter)/'timing.json', {})
     valid = saved.get('source_token') == token
     for beat in current:
         n = len(beat['panels'])
         equal = [beat['duration']*i/n for i in range(1,n)]
-        values = saved.get('switches',{}).get(str(beat['number']), equal) if valid else equal
+        values = saved.get('switches',{}).get(str(beat['number']), equal) if valid else beat.get('aligned_switches',equal)
         beat['switches'] = validate_switches(values,n,beat['duration'])
-    return {'source_token':token,'render_token':render_token(token,current),'beats':current,
+    return {'chapter':chapter,'source_token':token,'render_token':render_token(token,current),'beats':current,
             'duration':sum(b['duration'] for b in current), 'timing_reset':bool(saved and not valid),
-            'timing_mode':saved.get('mode','saved timing') if valid else 'equal timing', 'pacing':audio.pacing(mid),
+            'timing_mode':saved.get('mode','saved timing') if valid else 'phrase-aligned' if all(b.get('aligned_switches') is not None or b['silent'] or len(b['panels'])==1 for b in current) else 'equal timing', 'pacing':audio.pacing(mid, chapter),
             'motion_style':dict(MOTION_STYLE), 'transition_style':dict(TRANSITION_STYLE)}
 
 
@@ -247,19 +253,19 @@ def save(mid, chapter, token, number, values):
         validate_switches(values,len(beat['panels']),beat['duration'])
         switches = {str(b['number']):b['switches'] for b in state['beats']}
         switches[str(number)] = values
-        storage.write_json(root(mid)/'timing.json',{'source_token':token,'switches':switches})
+        storage.write_json(root(mid, chapter)/'timing.json',{'source_token':token,'switches':switches})
         return status(mid,chapter)
 
 
 def export_path(mid, state):
-    return root(mid)/('chapter-1-'+state['render_token']+'.mp4')
+    return root(mid, state.get('chapter','Chapter 1'))/(('chapter-1-' if state.get('chapter','Chapter 1')=='Chapter 1' else 'video-')+state['render_token']+'.mp4')
 
 
 def status(mid, chapter):
     with lock:
         state = timeline(mid,chapter)
         state['ready'] = export_path(mid,state).is_file()
-        job = dict(jobs.get(mid,{'running':False,'message':'MP4 ready.' if state['ready'] else 'Ready to render Chapter 1.'}))
+        job = dict(jobs.get(job_key(mid,chapter),{'running':False,'message':'MP4 ready.' if state['ready'] else 'Ready to render this chapter.'}))
         if job.get('running') and job.get('progress_path'):
             p = Path(job['progress_path'])
             if p.exists():
@@ -310,37 +316,38 @@ def render_to(state, work):
 def run(mid, chapter, state):
     started = time.monotonic()
     try:
-        root(mid).mkdir(parents=True,exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix='render-',dir=root(mid)) as name:
+        root(mid, chapter).mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='render-',dir=root(mid, chapter)) as name:
             work = Path(name)
             with lock:
-                jobs[mid].update(message='Rendering MP4…',progress_path=str(work/'progress.txt'))
+                jobs[job_key(mid,chapter)].update(message='Rendering MP4…',progress_path=str(work/'progress.txt'))
             render_to(state, work)
             with lock:
                 if timeline(mid,chapter)['render_token']!=state['render_token']:
                     raise FileExistsError('Timing or source changed during render. Render the current version again.')
                 (work/'chapter.mp4').replace(export_path(mid,state))
-                jobs[mid].update(message=f'MP4 ready. Rendered in {time.monotonic()-started:.1f}s.',progress=1,error=False)
-                storage.write_json(root(mid)/'export.json',{'render_token':state['render_token'],'duration':state['duration'],
+                jobs[job_key(mid,chapter)].update(message=f'MP4 ready. Rendered in {time.monotonic()-started:.1f}s.',progress=1,error=False)
+                storage.write_json(root(mid, chapter)/'export.json',{'render_token':state['render_token'],'duration':state['duration'],
                     'width':WIDTH,'height':HEIGHT,'fps':FPS,'panels':sum(len(b['panels']) for b in state['beats']),
                     'visual_style':VISUAL_STYLE,'motion_style':MOTION_STYLE,'transition_style':TRANSITION_STYLE})
     except Exception as exc:
-        with lock:jobs[mid].update(message=f'Export stopped: {exc}',error=True)
+        with lock:jobs[job_key(mid,chapter)].update(message=f'Export stopped: {exc}',error=True)
     finally:
         with lock:
-            jobs[mid]['running']=False
-            jobs[mid].pop('progress_path',None)
+            jobs[job_key(mid,chapter)]['running']=False
+            jobs[job_key(mid,chapter)].pop('progress_path',None)
 
 
 def start(mid, chapter, token):
-    with lock:
-        if jobs.get(mid,{}).get('running'):raise FileExistsError('An export is already running.')
+    with task_lock, lock:
+        ensure_idle()
+        if jobs.get(job_key(mid,chapter),{}).get('running'):raise FileExistsError('An export is already running.')
         if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):raise ValueError('FFmpeg and ffprobe are required.')
         state=timeline(mid,chapter)
         if state['render_token']!=token:raise FileExistsError('Timing changed. Reload and export the current version.')
-        jobs[mid]={'running':True,'message':'Preparing panel images and audio…','progress':0,'duration':state['duration']}
+        jobs[job_key(mid,chapter)]={'running':True,'message':'Preparing panel images and audio…','progress':0,'duration':state['duration']}
         threading.Thread(target=run,args=(mid,chapter,state),daemon=True).start()
-        return dict(jobs[mid])
+        return dict(jobs[job_key(mid,chapter)])
 
 
 def asset(mid,chapter,token):
@@ -352,7 +359,7 @@ def asset(mid,chapter,token):
 
 
 def frame_asset(mid, chapter, panel_id, revision, style):
-    current, _ = source(mid, chapter)  # Same Chapter 1 scope and selected crops as export.
+    current, _ = source(mid, chapter)  # Same selected crops as export.
     if style != digest(VISUAL_STYLE):raise FileExistsError('Video style changed. Reload the preview.')
     panel = next((p for b in current for p in b['panels'] if p['id']==panel_id and p['revision']==revision), None)
     if panel is None:raise FileNotFoundError('Current selected panel not found.')

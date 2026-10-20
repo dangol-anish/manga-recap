@@ -15,3 +15,8 @@ $('#alignment-video').onplay=()=>{stop();$('#result').pause();};
 $('#alignment-play').onclick=async()=>{stop();$('#result').pause();try{$('#alignment-video').currentTime=0;await $('#alignment-video').play();$('#alignment-video').scrollIntoView({block:'center',behavior:'smooth'});}catch(e){$('#alignment-message').textContent=e.message;}};
 
 $('#alignment-examples-link').href=`/alignment-examples/${encodeURIComponent(mid)}/${encodeURIComponent(chapter)}`;
+
+let chapterAlignmentTimer=null;
+async function chapterAlignmentPoll(){try{const job=await request(`/api/alignment-job/${encodeURIComponent(mid)}/${encodeURIComponent(chapter)}`);$('#chapter-alignment-job').textContent=job.message;$('#alignment-chapter').disabled=job.running;if(!job.running&&chapterAlignmentTimer){clearInterval(chapterAlignmentTimer);chapterAlignmentTimer=null;await refresh(true);}}catch(e){$('#chapter-alignment-job').textContent=e.message;}}
+$('#alignment-chapter').onclick=async()=>{try{if(dirty)throw Error('Save panel timing edits first.');stop();await request(`/api/alignment/${encodeURIComponent(mid)}/${encodeURIComponent(chapter)}/apply`,{source_token:state.source_token});await chapterAlignmentPoll();chapterAlignmentTimer=setInterval(chapterAlignmentPoll,2000);}catch(e){$('#chapter-alignment-job').textContent=e.message;}};
+chapterAlignmentPoll();

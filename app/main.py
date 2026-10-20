@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-import fcntl
 import json
 import subprocess
 import sys
@@ -14,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.storage import ROOT, DATA, OUTPUTS, DIRECTIONS, chapters, pages, local_path, page_output, job_path, read_json, write_json
 from app.validation import saved_page_errors
 from app.authorization import processing_allowed
+from app.runtime import acquire_server_lock
 
 mutex = threading.RLock()
 process = None
@@ -51,19 +51,14 @@ def stop():
 @asynccontextmanager
 async def lifespan(app):
     DATA.mkdir(exist_ok=True)
-    lock = open(DATA / 'server.lock', 'a')
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        lock.close()
-        raise RuntimeError('Another manga-recap server is already running.')
+    lock = acquire_server_lock(DATA / 'server.lock')
     # A separate worker can survive a forced server kill. Terminate that precise
     # repo worker before recovering its job, so two processes never write a page.
     for path in OUTPUTS.glob('*/*/_job.json'):
         job = read_json(path)
         if job['status'] == 'running':
             pid = job.get('pid')
-            if pid:
+            if pid and sys.platform != 'win32':
                 result = subprocess.run(['ps', '-p', str(pid), '-o', 'command='], capture_output=True, text=True)
                 expected = f'{ROOT / ".venv/bin/python"} -m app.worker {path}'
                 if result.stdout.strip() == expected:
@@ -83,8 +78,11 @@ async def lifespan(app):
             job.update(status='paused', message='Interrupted by shutdown. Resume this chapter to continue.')
             write_json(path, job)
     try:
+        from app import downloader
+        downloader.recover()
         yield
     finally:
+        downloader.shutdown()
         with mutex:
             stop()
         lock.close()
@@ -109,6 +107,11 @@ async def local_requests(request: Request, call_next):
 
 @app.get('/')
 def library_page():
+    return FileResponse(ROOT / 'app/static/downloader.html')
+
+
+@app.get('/library')
+def existing_library_page():
     return FileResponse(ROOT / 'app/static/index.html')
 
 
@@ -142,7 +145,7 @@ def add_manga(body: MangaInput):
             raise HTTPException(400, 'Direction must be rtl or ltr.')
         try:
             folder = local_path(body.folder.strip())
-            manga = {'id': uuid.uuid4().hex, 'name': folder.name, 'folder': str(folder.relative_to(ROOT)), 'direction': body.direction}
+            manga = {'id': uuid.uuid4().hex, 'name': folder.name, 'folder': str(folder.relative_to(ROOT)), 'direction': body.direction, 'pacing':dict(audio.DEFAULT_PACING)}
             if not chapters(manga):
                 raise ValueError('No chapter folders containing PNG/JPG/WebP pages were found.')
         except ValueError as exc:
@@ -178,7 +181,7 @@ def get_library():
                     done = sum(p['done'] for p in page_results)
                     item['chapters'].append({
                         'name': chapter.name, 'allowed': processing_allowed(manga['id'], chapter.name), 'total': len(page_results), 'done': done,
-                        'review_ready': (OUTPUTS / manga['id'] / chapter.name / 'stage2/_report.json').exists() and chapter.name in {'Chapter 1','Chapter 12'},
+                        'review_ready': (OUTPUTS / manga['id'] / chapter.name / 'stage2/_report.json').exists(),
                         'flagged': sum(p.get('flagged', False) for p in page_results),
                         'panels': sum(p['panels'] or 0 for p in page_results),
                         'seconds': round(sum(p['seconds'] or 0 for p in page_results), 3),
@@ -189,21 +192,24 @@ def get_library():
                 item['error'] = str(exc)
             entries.append(item)
         validation = read_json(DATA / 'model-validation.json', {})
-        return {'manga': entries, 'busy': process is not None, 'detector_ready': validation.get('panel_only_validated', False), 'validation_message': validation.get('reason', 'Panel-only model validation is required before processing.')}
+        return {'manga': entries, 'busy': process is not None, 'detector_ready': validation.get('panel_only_validated', False), 'validation_message': 'Magi v3 ready · only panel boxes are saved. Choose any registered chapter.' if validation.get('panel_only_validated') else validation.get('reason', 'Panel-only model validation is required before processing.')}
 
 
 @app.post('/api/manga/{manga_id}/chapters/{chapter_name}/start')
 def start_chapter(manga_id: str, chapter_name: str):
     global process, active_job
-    with mutex:
+    from app.tasks import lock as task_lock, ensure_idle
+    with task_lock, mutex:
         reconcile()
         if process is not None:
             raise HTTPException(409, 'A chapter is already running. Stop it or wait for completion.')
+        try:ensure_idle()
+        except FileExistsError as exc:raise HTTPException(409,str(exc))
         validation = read_json(DATA / 'model-validation.json', {})
         if not validation.get('panel_only_validated', False):
             raise HTTPException(409, validation.get('reason', 'Panel-only Magi v3 must pass validation before processing.'))
         if not processing_allowed(manga_id, chapter_name):
-            raise HTTPException(403, 'Only Chapter 1 and Chapter 12 of the approved manga may be processed.')
+            raise HTTPException(403, 'Select a registered chapter with validated panel detection.')
         manga = find_manga(manga_id)
         chapter = find_chapter(manga, chapter_name)
         if all(not saved_page_errors(read_json(page_output(manga, chapter.name, p.name)), p) for p in pages(chapter)):
@@ -292,7 +298,7 @@ def review_image(manga_id: str, chapter_name: str, page_name: str, kind: str, re
             raise review_error(exc)
     return FileResponse(path, headers={'Cache-Control': 'no-cache' if kind == 'source' else 'private, max-age=31536000, immutable'})
 
-# Stage 3 is strictly restricted to Chapter 1.
+# Narration export and validated import.
 from app import narration
 from fastapi.responses import JSONResponse
 
@@ -332,7 +338,7 @@ def narration_export(manga_id: str, chapter_name: str, batch_id: str, fingerprin
             path = narration.export_zip(manga_id, chapter_name, batch_id, fingerprint)
         except (PermissionError, FileNotFoundError, FileExistsError, ValueError) as exc:
             raise review_error(exc)
-    return FileResponse(path, media_type='application/zip', filename=f'Chapter-1-{batch_id}.zip')
+    return FileResponse(path, media_type='application/zip', filename=f'{chapter_name}-{batch_id}.zip')
 
 
 class NarrationImport(BaseModel):
@@ -341,19 +347,20 @@ class NarrationImport(BaseModel):
     corrections_only: bool = False
     final_recap: bool = False
     context_token: str | None = Field(default=None,min_length=64,max_length=64)
+    require_receipt: bool = True
 
 
 @app.post('/api/narration/{manga_id}/{chapter_name}/{batch_id}/import')
 def narration_import(manga_id: str, chapter_name: str, batch_id: str, body: NarrationImport):
     with mutex:
         try:
-            result = narration.import_reply(manga_id, chapter_name, batch_id, body.fingerprint, body.reply, body.corrections_only, body.final_recap, body.context_token)
+            result = narration.import_reply(manga_id, chapter_name, batch_id, body.fingerprint, body.reply, body.corrections_only, body.final_recap, body.context_token, body.require_receipt)
         except (PermissionError, FileNotFoundError, FileExistsError, ValueError) as exc:
             raise review_error(exc)
     return JSONResponse(result,status_code=200 if result['ok'] else 422)
 
 
-# Stage 4 uses only imported Chapter 1 narration; no image processing.
+# Speech uses imported chapter narration only; no image processing.
 from app import audio
 
 
@@ -460,7 +467,7 @@ def video_mp4(manga_id: str, chapter_name: str, token: str, download: bool = Fal
         path = video.asset(manga_id, chapter_name, token)
     except (PermissionError, FileNotFoundError, FileExistsError, ValueError) as exc:
         raise review_error(exc)
-    return FileResponse(path, media_type='video/mp4', filename='Chapter-1.mp4' if download else None,
+    return FileResponse(path, media_type='video/mp4', filename=f'{chapter_name}.mp4' if download else None,
                         headers={'Cache-Control':'no-store'})
 
 
@@ -532,6 +539,65 @@ def alignment_examples_page(manga_id: str, chapter_name: str):
 @app.get('/api/alignment-examples/{manga_id}/{chapter_name}')
 def alignment_examples_status(manga_id: str, chapter_name: str):
     try:
-        return {'chapter':chapter_name,'examples':[alignment.status(manga_id,chapter_name,n) for n in alignment.TRIAL_BEATS]}
+        return {'chapter':chapter_name,'examples':[a for b in video.source(manga_id,chapter_name)[0] if (a:=alignment.status(manga_id,chapter_name,b['number']))['ready']]}
     except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:
         raise review_error(exc)
+
+
+@app.post('/api/panels/{manga_id}/{chapter_name}/prepare')
+def prepare_review(manga_id: str,chapter_name: str):
+    with mutex:
+        reconcile()
+        if process is not None:raise HTTPException(409,'Wait for panel detection to finish.')
+        try:return review.prepare_chapter(manga_id,chapter_name)
+        except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:raise review_error(exc)
+
+
+@app.get('/memory/{manga_id}')
+def memory_page(manga_id: str):
+    find_manga(manga_id)
+    return FileResponse(ROOT/'app/static/memory.html')
+
+
+@app.get('/api/memory/{manga_id}')
+def memory_status(manga_id: str,q: str=''):
+    find_manga(manga_id)
+    from app import memory
+    with mutex:return memory.overview(manga_id,q[:200])
+
+
+class MemoryEdit(BaseModel):
+    revision: str = Field(min_length=64,max_length=64)
+    chapter_summary: str = Field(max_length=1200)
+    memory: list[dict] = Field(max_length=30)
+    cast: list[dict] | None = Field(default=None,max_length=100)
+
+
+@app.post('/api/memory/{manga_id}/{chapter_name}/{batch_id}')
+def memory_edit(manga_id: str,chapter_name: str,batch_id: str,body: MemoryEdit):
+    find_manga(manga_id)
+    from app import memory
+    with mutex:
+        try:return memory.edit(manga_id,chapter_name,batch_id,body.revision,body.chapter_summary,body.memory,body.cast)
+        except (FileNotFoundError,FileExistsError,ValueError) as exc:raise review_error(exc)
+
+
+class ChapterAlignmentInput(BaseModel):
+    source_token: str = Field(min_length=64,max_length=64)
+
+
+@app.post('/api/alignment/{manga_id}/{chapter_name}/apply')
+def apply_phrase_timing(manga_id: str,chapter_name: str,body: ChapterAlignmentInput):
+    try:return alignment.start_chapter(manga_id,chapter_name,body.source_token)
+    except (PermissionError,FileNotFoundError,FileExistsError,ValueError) as exc:raise review_error(exc)
+
+
+@app.get('/api/alignment-job/{manga_id}/{chapter_name}')
+def chapter_alignment_status(manga_id: str,chapter_name: str):
+    try:narration.context(manga_id,chapter_name)
+    except (PermissionError,FileNotFoundError,ValueError) as exc:raise review_error(exc)
+    return alignment.chapter_status(manga_id,chapter_name)
+
+# Stage 1 downloads are independent of panel detection.
+from app.downloader import router as downloader_router
+app.include_router(downloader_router)

@@ -65,7 +65,7 @@ class AlignmentTests(unittest.TestCase):
         with self.assertRaises(ValueError):alignment.aligned_words('One.',[],[],1)
 
     def test_only_one_approved_beat_can_generate(self):
-        with self.assertRaises(PermissionError):alignment.start('test','Chapter 1',5,'a'*64)
+        with self.assertRaises(ValueError):alignment.start('test','Chapter 1',5,'a'*64)
         alignment.save_map('test','Chapter 1',6,'a'*64,json.dumps(self.payload))
         with patch('threading.Thread') as thread:
             alignment.start('test','Chapter 1',6,'a'*64)
@@ -88,14 +88,13 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(result.status_code,422)
         self.ctx.stop()
         try:
-            self.assertEqual(c.get('/api/alignment/test/Chapter%2012/6').status_code,403)
-            self.assertEqual(c.get('/api/alignment/test/Chapter%2012/6/prompt').status_code,403)
-            self.assertEqual(c.post('/api/alignment/test/Chapter%2012/6/trial',json={'source_token':'a'*64}).status_code,403)
+            self.assertEqual(c.get('/api/alignment/test/Chapter%2012/6').status_code,404)
+            self.assertEqual(c.get('/api/alignment/test/Chapter%2012/6/prompt').status_code,404)
+            self.assertEqual(c.post('/api/alignment/test/Chapter%2012/6/trial',json={'source_token':'a'*64}).status_code,404)
         finally:self.ctx.start()
 
     def test_additional_examples_are_explicitly_scoped(self):
-        self.assertEqual(alignment.TRIAL_BEATS,(6,10,19,25))
-        for number in (10,19,25):
+        for number in (1,5,7,10,19,25,30):
             payload=copy.deepcopy(self.payload);payload['beat']=number
             self.assertTrue(alignment.save_map('test','Chapter 1',number,'a'*64,json.dumps(payload))['ok'])
             alignment.jobs.clear()
@@ -103,19 +102,17 @@ class AlignmentTests(unittest.TestCase):
                 alignment.start('test','Chapter 1',number,'a'*64)
                 self.assertEqual(thread.call_args.kwargs['args'][2]['number'],number)
         alignment.jobs.clear()
-        for number in (1,5,7,30):
-            with self.assertRaises(PermissionError):alignment.start('test','Chapter 1',number,'a'*64)
         self.ctx.stop()
         try:
             c=TestClient(main.app)
-            self.assertEqual(c.get('/alignment-examples/test/Chapter%2012').status_code,403)
-            self.assertEqual(c.get('/api/alignment-examples/test/Chapter%2012').status_code,403)
+            self.assertEqual(c.get('/alignment-examples/test/Chapter%2012').status_code,404)
+            self.assertEqual(c.get('/api/alignment-examples/test/Chapter%2012').status_code,404)
         finally:self.ctx.start()
 
 
 class ChapterAlignmentTests(unittest.TestCase):
     def test_other_chapters_rejected(self):
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(FileNotFoundError):
             alignment.apply_chapter('test', 'Chapter 12')
 
     def test_cached_audio_published_only_after_render_and_rolls_back_on_failure(self):

@@ -9,16 +9,13 @@ import uuid
 from PIL import Image, ImageDraw, ImageFont
 from app import storage
 
-ALLOWED_CHAPTERS = {'Chapter 1', 'Chapter 12'}
-
 
 def review_context(manga_id, chapter_name, page_name=None):
-    policy = storage.read_json(storage.DATA / 'model-validation.json', {})
-    if manga_id != policy.get('allowed_manga_id') or chapter_name not in ALLOWED_CHAPTERS:
-        raise PermissionError('Stage 2 is restricted to the approved manga’s Chapter 1 and Chapter 12.')
     manga = next((m for m in storage.read_json(storage.DATA / 'library.json', []) if m['id'] == manga_id), None)
     if manga is None:
         raise FileNotFoundError('Manga not found.')
+    if not chapter_name or Path(chapter_name).name!=chapter_name or chapter_name in {'.','..'}:
+        raise FileNotFoundError('Chapter not found.')
     folder = storage.local_path(manga['folder']) / chapter_name
     if folder.is_symlink() or not folder.is_dir():
         raise FileNotFoundError('Chapter folder not found.')
@@ -32,9 +29,12 @@ def review_context(manga_id, chapter_name, page_name=None):
 
 
 def page_id(page):
-    if not page.stem.isdigit():
-        raise ValueError('Stage 2 requires numbered page filenames.')
-    return f'p{int(page.stem):03}'
+    chapter_pages=storage.pages(page.parent)
+    numeric=[p.stem for p in chapter_pages if p.stem.isdigit()]
+    if page.stem.isdigit() and len(numeric)==len(chapter_pages) and len(set(map(int,numeric)))==len(numeric):
+        return f'p{int(page.stem):03}'
+    # Natural filename order supports downloaded pages such as page_001.jpg.
+    return f'p{chapter_pages.index(page)+1:03}'
 
 
 def chapter_root(manga, chapter):
@@ -161,7 +161,11 @@ def prepare_chapter(manga_id, chapter):
             continue  # Preserve manual fixes across restarts/rebuilds.
         saved=storage.read_json(storage.page_output(manga,chapter,page.name))
         if saved is None:
-            raise FileNotFoundError(f'{chapter}/{page.name}: saved panel JSON is missing. Detection was not rerun.')
+            report=storage.read_json(storage.OUTPUTS/manga_id/chapter/'_report.json',{})
+            if not any(item['page']==page.name for item in report.get('flagged',[])):
+                raise FileNotFoundError(f'{chapter}/{page.name}: run panel detection first.')
+            generate_page(manga,chapter,page,[],zero_panels=True)
+            continue
         panels=sorted(saved['panels'],key=lambda p:p['order'])
         generate_page(manga,chapter,page,[p['box'] for p in panels])
     return chapter_report(manga_id,chapter)

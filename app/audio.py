@@ -1,4 +1,5 @@
-"""Chapter 1 speech only. Sequential online synthesis; atomic local MP3s."""
+"""Chapter-scoped speech. Sequential online synthesis; atomic local MP3s."""
+from app.tasks import lock as task_lock, ensure_idle
 import asyncio
 import hashlib
 import json
@@ -12,58 +13,71 @@ from pathlib import Path
 from app import narration, storage
 
 VOICE = 'en-US-AndrewMultilingualNeural'
+DEFAULT_PACING={'rate':'+20%','speed':1.2,'sentence_pause':.18}
 # Base trimming profile; approved per-chapter speed/period pauses live in pacing.json.
 PAUSE_PROFILE = 'pcm-rms-v1:threshold=-45dB:min-gap=0.20:keep=0.10:window=0.01'
 lock = threading.RLock()
 jobs = {}
 
-
-def root(manga_id):
-    return narration.root(manga_id) / 'audio'
-
-
-def pacing(manga_id):
-    return storage.read_json(root(manga_id) / 'pacing.json', {})
+def job_key(mid, chapter):
+    return mid if chapter=='Chapter 1' else (mid,chapter)
 
 
-def manifest(manga_id):
-    return storage.read_json(root(manga_id) / 'audio.json', {'clips': {}})
+def root(manga_id, chapter='Chapter 1'):
+    return narration.root(manga_id, chapter) / 'audio'
+
+
+def pacing(manga_id, chapter='Chapter 1'):
+    saved=storage.read_json(root(manga_id,chapter)/'pacing.json')
+    if saved is not None:return saved
+    manga=next((m for m in storage.read_json(storage.DATA/'library.json',[]) if m['id']==manga_id),{})
+    if manga.get('pacing'):return dict(manga['pacing'])
+    # Older libraries retain their saved preference without rewriting their data.
+    profiles=[p for p in (storage.OUTPUTS/manga_id).glob('*/stage3/audio/pacing.json') if p.resolve().is_relative_to(storage.ROOT)]
+    return storage.read_json(max(profiles,key=lambda p:p.stat().st_mtime_ns),{}) if profiles else {}
+
+
+def manifest(manga_id, chapter='Chapter 1'):
+    return storage.read_json(root(manga_id, chapter) / 'audio.json', {'clips': {}})
 
 
 def beats(manga_id, chapter):
-    status = narration.status(manga_id, chapter)  # Enforces Chapter 1 and registered input.
+    status = narration.status(manga_id, chapter)  # Requires fresh imported narration.
     if not status['batches'] or not all(b['imported'] for b in status['batches']):
-        raise FileExistsError('Import both current Chapter 1 narration batches before generating audio.')
+        raise FileExistsError('Import all current narration batches before generating audio.')
     state = narration.load_state(manga_id)
     result = []
     for batch in status['batches']:
         for beat in state['chapters'][chapter]['batches'][batch['id']]['beats']:
-            token = hashlib.sha256(json.dumps([VOICE, PAUSE_PROFILE, beat['panel_ids'], beat['narration']], ensure_ascii=False).encode()).hexdigest()
+            token_data=[VOICE, PAUSE_PROFILE, beat['panel_ids'], beat['narration']]
+            if beat.get('anchors'):token_data.append(beat['anchors'])
+            token = hashlib.sha256(json.dumps(token_data, ensure_ascii=False).encode()).hexdigest()
             result.append({'number': len(result)+1, 'panel_ids': beat['panel_ids'],
-                           'narration': beat['narration'], 'token': token})
+                           'narration': beat['narration'], 'token': token, **({'anchors':beat['anchors']} if beat.get('anchors') else {})})
     return result
 
 
-def clip_path(manga_id, clip):
+def clip_path(manga_id, clip, chapter='Chapter 1'):
     name = clip.get('file', '')
     if not name or Path(name).name != name or not name.endswith('.mp3'):
         return None
-    path = root(manga_id) / name
+    path = root(manga_id, chapter) / name
     return path if path.is_file() and path.stat().st_size > 0 else None
 
 
 def status(manga_id, chapter):
     with lock:
         current = beats(manga_id, chapter)
-        saved = manifest(manga_id)['clips']
-        settings = pacing(manga_id)
-        job = jobs.get(manga_id, {'running': False, 'message': 'Ready to generate Chapter 1 audio.'})
+        saved = manifest(manga_id, chapter)['clips']
+        settings = pacing(manga_id, chapter)
+        job = jobs.get(job_key(manga_id,chapter), {'running': False, 'message': 'Ready to generate chapter audio.'})
         for beat in current:
             clip = saved.get(beat['token'], {})
             beat['silent'] = not beat['narration'].strip()
-            beat['ready'] = not beat['silent'] and clip_path(manga_id, clip) is not None and clip.get('pacing', {}) == settings
+            beat['ready'] = not beat['silent'] and clip_path(manga_id, clip, chapter) is not None and clip.get('pacing', {}) == settings
             beat['duration'] = clip.get('duration') if beat['ready'] else None
             beat['revision'] = clip.get('file') if beat['ready'] else None
+            if beat['ready'] and clip.get('timing_anchors'):beat['timing_anchors']=clip['timing_anchors']
         return {'chapter': chapter, 'voice': VOICE, 'pacing': settings, 'beats': current,
                 'ready': sum(b['ready'] for b in current),
                 'spoken': sum(not b['silent'] for b in current), 'job': dict(job)}
@@ -147,31 +161,37 @@ async def synthesize(text, target):
 
 def generate_one(manga_id, chapter, beat):
     from mutagen.mp3 import MP3
-    directory = root(manga_id)
+    directory = root(manga_id, chapter)
     directory.mkdir(parents=True, exist_ok=True)
     revision = beat['token'] + '-' + uuid.uuid4().hex
     temporary = directory / ('.' + revision + '.tmp')
     target = directory / (revision + '.mp3')
     started = time.monotonic()
     try:
-        settings = pacing(manga_id)
-        if settings:
+        settings = pacing(manga_id, chapter)
+        spoken=None
+        if settings or beat.get('anchors'):
             from app import alignment
-            alignment.speech(beat['narration'], temporary, settings)
+            spoken=alignment.speech(beat['narration'], temporary, settings)
+            if beat.get('anchors'):
+                _,anchors=alignment.validate_map(beat,{'beat':beat['number'],'anchors':beat['anchors']})
+                timed=alignment.anchor_times(beat,anchors,spoken['words'],spoken['duration'])
         else:
             asyncio.run(synthesize(beat['narration'], temporary))
         info = MP3(temporary).info
         if info.length <= 0:
             raise ValueError('The speech service returned empty audio.')
         with lock:
-            if pacing(manga_id) != settings:
+            if pacing(manga_id, chapter) != settings:
                 raise FileExistsError('Speech pacing changed during generation. Retry this beat.')
             current = beats(manga_id, chapter)
             if not any(b['token'] == beat['token'] for b in current):
                 raise FileExistsError('Narration changed during generation. Generate audio again for the current beats.')
             temporary.replace(target)
-            saved = manifest(manga_id)
+            saved = manifest(manga_id, chapter)
             saved['clips'][beat['token']] = {'file': target.name, 'duration': info.length, 'voice': VOICE, 'pause_filter': PAUSE_PROFILE, 'pacing': settings}
+            if spoken and beat.get('anchors'):
+                saved['clips'][beat['token']].update(timing_anchors=timed,words=spoken['words'])
             storage.write_json(directory / 'audio.json', saved)
         print(f'Audio beat {beat["number"]}: {info.length:.1f}s audio, {time.monotonic()-started:.1f}s generation', flush=True)
     finally:
@@ -183,25 +203,26 @@ def run(manga_id, chapter, selected, regenerate):
     try:
         for index, beat in enumerate(selected, 1):
             with lock:
-                jobs[manga_id].update(message=f'Generating beat {beat["number"]} ({index}/{len(selected)})…')
-                existing = manifest(manga_id)['clips'].get(beat['token'], {})
-            if regenerate or clip_path(manga_id, existing) is None or existing.get('pacing', {}) != pacing(manga_id):
+                jobs[job_key(manga_id,chapter)].update(message=f'Generating beat {beat["number"]} ({index}/{len(selected)})…')
+                existing = manifest(manga_id, chapter)['clips'].get(beat['token'], {})
+            if regenerate or clip_path(manga_id, existing, chapter) is None or existing.get('pacing', {}) != pacing(manga_id, chapter):
                 generate_one(manga_id, chapter, beat)
             with lock:
-                jobs[manga_id]['completed'] = index
+                jobs[job_key(manga_id,chapter)]['completed'] = index
         with lock:
-            jobs[manga_id].update(message=f'Finished {len(selected)} beat(s) in {time.monotonic()-started:.1f}s.', error=False)
+            jobs[job_key(manga_id,chapter)].update(message=f'Finished {len(selected)} beat(s) in {time.monotonic()-started:.1f}s.', error=False)
     except Exception as exc:
         with lock:
-            jobs[manga_id].update(message=f'Audio generation stopped: {type(exc).__name__}: {exc}. Completed clips are safe; retry to resume.', error=True)
+            jobs[job_key(manga_id,chapter)].update(message=f'Audio generation stopped: {type(exc).__name__}: {exc}. Completed clips are safe; retry to resume.', error=True)
     finally:
         with lock:
-            jobs[manga_id]['running'] = False
+            jobs[job_key(manga_id,chapter)]['running'] = False
 
 
 def start(manga_id, chapter, number=None):
-    with lock:
-        if jobs.get(manga_id, {}).get('running'):
+    with task_lock, lock:
+        ensure_idle()
+        if jobs.get(job_key(manga_id,chapter), {}).get('running'):
             raise FileExistsError('Audio generation is already running. Wait for it to finish.')
         current = status(manga_id, chapter)['beats']
         if number is not None and not 1 <= number <= len(current):
@@ -209,9 +230,9 @@ def start(manga_id, chapter, number=None):
         selected = [b for b in current if not b['silent'] and (b['number'] == number if number is not None else not b['ready'])]
         if not selected:
             raise ValueError('No speech to generate. Empty narration beats are intentionally silent; completed clips can be regenerated individually.')
-        jobs[manga_id] = {'running': True, 'completed': 0, 'total': len(selected), 'message': 'Starting speech generation…', 'error': False}
+        jobs[job_key(manga_id,chapter)] = {'running': True, 'completed': 0, 'total': len(selected), 'message': 'Starting speech generation…', 'error': False}
         threading.Thread(target=run, args=(manga_id, chapter, selected, number is not None), daemon=True).start()
-        return dict(jobs[manga_id])
+        return dict(jobs[job_key(manga_id,chapter)])
 
 
 def asset(manga_id, chapter, number):
@@ -219,8 +240,8 @@ def asset(manga_id, chapter, number):
         current = beats(manga_id, chapter)
         if not 1 <= number <= len(current):
             raise FileNotFoundError('Beat not found.')
-        clip = manifest(manga_id)['clips'].get(current[number-1]['token'], {})
-        path = clip_path(manga_id, clip)
+        clip = manifest(manga_id, chapter)['clips'].get(current[number-1]['token'], {})
+        path = clip_path(manga_id, clip, chapter)
         if path is None:
             raise FileNotFoundError('Generate audio for this beat first.')
         return path

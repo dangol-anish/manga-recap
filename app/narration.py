@@ -1,4 +1,4 @@
-"""Stage 3: Chapter 1 export and validated narration import; no inference."""
+"""Batch narration and persistent, manga-scoped story context."""
 from collections import Counter
 import hashlib
 import json
@@ -8,18 +8,15 @@ import tempfile
 import zipfile
 from app import storage, review
 
-CHAPTER = 'Chapter 1'
 CAST_FIELDS = ('name','gender','age_group','role','look')
 
 
 def context(manga_id, chapter):
-    if chapter != CHAPTER:
-        raise PermissionError('Stage 3 is approved for Chapter 1 only.')
     return review.review_context(manga_id,chapter)
 
 
-def root(manga_id):
-    return storage.OUTPUTS / manga_id / CHAPTER / 'stage3'
+def root(manga_id, chapter='Chapter 1'):
+    return storage.OUTPUTS / manga_id / chapter / 'stage3'
 
 
 def state_path(manga_id):
@@ -30,12 +27,17 @@ def state_path(manga_id):
 def load_state(manga_id):
     state=storage.read_json(state_path(manga_id))
     if state is not None:
+        if 'legacy_cast_after' not in state:
+            from app.memory import ordered
+            entries=[(c,b) for c in ordered(state) for b in sorted(state['chapters'][c].get('batches',{}))]
+            state['legacy_cast_after']=list(entries[-1]) if entries else None
+            state['legacy_cast']=state.get('cast',[]) if entries else []
         return state
     cast=storage.read_json(storage.DATA/'manga'/manga_id/'cast.json',[])
     if isinstance(cast,dict):cast=cast.get('cast',[])
     if not isinstance(cast,list):
         raise ValueError('Saved manga cast must be a JSON list.')
-    return {'schema_version':3,'cast':cast,'chapters':{}}
+    return {'schema_version':6,'cast':cast,'chapters':{},'legacy_cast_after':None,'legacy_cast':[]}
 
 
 def batches(manga_id,chapter):
@@ -73,47 +75,33 @@ def _digest(value):
 
 
 def story_context(manga_id,chapter,batch_id):
-    current=batches(manga_id,chapter)
-    state=load_state(manga_id)
-    saved=state['chapters'].get(chapter,{}).get('batches',{})
-    preceding=[]
-    digest=_digest([])
-    for batch in current:
-        if batch['id']==batch_id:
-            ending=[beat['narration'] for item in preceding for beat in item['beats']][-3:]
-            return {'token':digest,'previous_narration_ending':ending,
-                    'continuity':preceding[-1]['continuity'] if preceding else {'summary':'','open_threads':[]},
-                    'preceding_batches':[b['id'] for b in preceding]}
-        entry=saved.get(batch['id'])
-        if not entry or entry.get('format')!='beats-v1' or entry['fingerprint']!=batch['fingerprint'] or entry.get('context_token')!=digest:
-            raise FileExistsError(f'Import the current story-beat reply for {batch["id"]} first so this prompt can continue its story.')
-        preceding.append(dict(entry,id=batch['id']))
-        digest=_digest(preceding)
-    raise FileNotFoundError('Batch not found.')
+    from app.memory import packet
+    return packet(manga_id,chapter,batch_id)
 
 
 def prompt_text(manga_id,chapter,batch_id='batch-001',final_recap=False):
     batch=find_batch(manga_id,chapter,batch_id)
     previous=story_context(manga_id,chapter,batch_id)
     master=(storage.ROOT/'prompts/narration_master.md').read_text()
-    cast=load_state(manga_id)['cast']
-    sections=[master,'CURRENT_BATCH: '+batch_id,'FINAL_RECAP: '+str(bool(final_recap)).lower(),
+    cast=previous['cast']
+    sections=[master,'MANGA: '+manga_id+' / CHAPTER: '+chapter,'CURRENT_BATCH: '+batch_id,'FINAL_RECAP: '+str(bool(final_recap)).lower(),
               'VALID_PANEL_IDS (exact IDs, in reading order):\n'+json.dumps(batch['panel_ids']),
               'Previous narration ending and saved story context:\n'+json.dumps(previous,ensure_ascii=False,indent=2)]
+    sections.append('BATCH_RECEIPT (copy exactly into batch_receipt in your reply):\n'+json.dumps({'manga_id':manga_id,'chapter':chapter,'batch_id':batch_id,'fingerprint':batch['fingerprint'],'context_token':previous['token']}))
     if cast:sections.append('Saved cast list:\n'+json.dumps({'cast':cast},ensure_ascii=False,indent=2))
     return '\n\n'.join(sections)+'\n'
 
 
 def prompt_file(manga_id,chapter,batch_id='batch-001',final_recap=False):
     text=prompt_text(manga_id,chapter,batch_id,final_recap)
-    path=root(manga_id)/'prompts'/batch_id/'narration_prompt.md'
+    path=root(manga_id,chapter)/'prompts'/batch_id/'narration_prompt.md'
     path.parent.mkdir(parents=True,exist_ok=True)
     fd,name=tempfile.mkstemp(dir=path.parent,prefix='.prompt-',suffix='.tmp')
     try:
         with os.fdopen(fd,'w') as stream:stream.write(text)
         os.replace(name,path)
         if batch_id=='batch-001' and not final_recap:
-            legacy=root(manga_id)/'narration_prompt.md'
+            legacy=root(manga_id,chapter)/'narration_prompt.md'
             legacy.write_text(text)
     finally:
         if os.path.exists(name):os.unlink(name)
@@ -122,7 +110,7 @@ def prompt_file(manga_id,chapter,batch_id='batch-001',final_recap=False):
 
 def export_zip(manga_id,chapter,batch_id,fingerprint):
     batch=find_batch(manga_id,chapter,batch_id,fingerprint)
-    target=root(manga_id)/'exports'/(batch_id+'-'+fingerprint+'.zip')
+    target=root(manga_id,chapter)/'exports'/(batch_id+'-'+fingerprint+'.zip')
     if target.exists():return target
     target.parent.mkdir(parents=True,exist_ok=True)
     fd,name=tempfile.mkstemp(dir=target.parent,prefix='.zip-',suffix='.tmp');os.close(fd)
@@ -132,15 +120,15 @@ def export_zip(manga_id,chapter,batch_id,fingerprint):
             for record in batch['page_records']:
                 page=record['page']
                 path=review.asset_path(manga_id,chapter,page,'labeled',record['revision'])
-                archive.write(path,arcname=review.page_id(Path(page))+'.png')
+                archive.write(path,arcname=review.page_id(review.review_context(manga_id,chapter,page)[1])+'.png')
         os.replace(name,target)
     finally:
         if os.path.exists(name):os.unlink(name)
     return target
 
 
-def pending_path(manga_id,batch_id):
-    return root(manga_id)/'pending'/(batch_id+'.json')
+def pending_path(manga_id,batch_id,chapter='Chapter 1'):
+    return root(manga_id,chapter)/'pending'/(batch_id+'.json')
 
 
 def status(manga_id,chapter):
@@ -162,7 +150,7 @@ def status(manga_id,chapter):
         batch['skipped_count']=len(batch['panel_ids'])-batch['selected_count'] if batch['imported'] else None
         batch['final_recap']=imported.get('final_recap',False) if imported else False
         total_beats+=batch['beat_count'];selected+=batch['selected_count']
-        draft=storage.read_json(pending_path(manga_id,batch['id']))
+        draft=storage.read_json(pending_path(manga_id,batch['id'],chapter))
         batch['pending']=draft.get('validation') if draft and draft.get('format')=='beats-v1' and draft['fingerprint']==batch['fingerprint'] and draft.get('context_token')==batch['context_token'] else None
     return {'chapter':chapter,'pages':sum(len(b['pages']) for b in current),
             'panels':sum(len(b['panel_ids']) for b in current),'cast_count':len(state['cast']),
@@ -211,6 +199,13 @@ def validate_payload(payload,expected):
         if not isinstance(beat.get('unsure',''),str):
             errors.append(f'Beat {i}: unsure must be a string.');bad.add(i)
         normalized.append({'panel_ids':ids,'narration':text,'unsure':beat.get('unsure','')})
+        if 'anchors' in beat and isinstance(text,str) and text.strip():
+            from app.alignment import validate_map
+            anchor_errors,anchors=validate_map({'number':i,'panel_ids':ids,'narration':text},{'beat':i,'anchors':beat['anchors']})
+            if anchor_errors:
+                errors.extend(f'Beat {i} anchors: '+e for e in anchor_errors);bad.add(i)
+            else:normalized[-1]['anchors']=[{'panel_id':a['panel_id'],'phrase':a['phrase']} for a in anchors]
+
     for pid,indexes in locations.items():
         if len(indexes)>1:
             for i in set(indexes):issue(pid,'Repeated ID: each selected panel may be used only once across all beats.',i)
@@ -255,12 +250,12 @@ def merge_cast(existing,incoming):
     return result
 
 
-def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=False,final_recap=False,context_token=None):
+def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=False,final_recap=False,context_token=None,require_receipt=False):
     batch=find_batch(manga_id,chapter,batch_id,fingerprint)
     previous=story_context(manga_id,chapter,batch_id)
     if context_token is not None and context_token!=previous['token']:
         raise FileExistsError('Earlier narration changed. Download a fresh batch prompt before importing this reply.')
-    expected=batch['panel_ids'];pending_file=pending_path(manga_id,batch_id)
+    expected=batch['panel_ids'];pending_file=pending_path(manga_id,batch_id,chapter)
     pending=storage.read_json(pending_file)
     if pending and (pending.get('format')!='beats-v1' or pending['fingerprint']!=fingerprint or pending.get('context_token')!=previous['token']):pending=None
     try:
@@ -279,7 +274,7 @@ def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=Fa
                 'can_correct':bool(pending and corrections_only),
                 'redo_message':'Fix JSON syntax only, retaining the same story beats and text. Return a valid JSON object.\n'+message}
     if corrections_only:
-        if not pending:raise ValueError('No current failed story-beat draft exists. Paste a full reply first.')
+        if not pending or not pending['validation'].get('can_correct'):raise ValueError('No correctable current draft exists. Generate and paste a full reply from the current prompt.')
         if not isinstance(payload,dict) or not isinstance(payload.get('beats'),list):
             raise ValueError('Corrections need a beats array with replace_beat numbers.')
         candidate=json.loads(json.dumps(pending['payload']))
@@ -294,32 +289,62 @@ def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=Fa
             validation=dict(pending['validation']);validation['errors']=replacement_errors
             validation.update(ok=False,can_correct=True,redo_message=redo_message(validation,candidate,expected))
             return validation
-        for key in ('cast','continuity'):
+        for key in ('cast','continuity','chapter_summary','memory','batch_receipt'):
             if key in payload:candidate[key]=payload[key]
         # Explicit empty corrections remove an affected beat without requiring coverage.
         candidate['beats']=[b for b in candidate['beats'] if not (isinstance(b,dict) and b.get('panel_ids')==[] and b.get('narration')=='')]
         payload=candidate
+    expected_receipt={'manga_id':manga_id,'chapter':chapter,'batch_id':batch_id,'fingerprint':fingerprint,'context_token':previous['token']}
+    supplied=payload.get('batch_receipt') if isinstance(payload,dict) else None
+    if isinstance(supplied,dict) and supplied!=expected_receipt:
+        if all(supplied.get(k)==expected_receipt[k] for k in ('manga_id','chapter','batch_id')):
+            raise FileExistsError('This AI reply used older panels or story context. Download the current prompt and generate a new full reply; do not just replace its receipt.')
+        message='This reply belongs to another manga, chapter or batch. Generate a new full reply using the current batch images and prompt; do not just relabel its receipt.'
+        return {'ok':False,'issues':{},'errors':[message],'fix_ids':[],'fix_beats':[],'can_correct':False,'redo_message':message}
     validation,beats,cast,continuity=validate_payload(payload,expected)
+    receipt={'manga_id':manga_id,'chapter':chapter,'batch_id':batch_id,'fingerprint':fingerprint,'context_token':previous['token']}
+    if isinstance(payload,dict) and (require_receipt or 'batch_receipt' in payload) and payload.get('batch_receipt')!=receipt:
+        validation['errors'].append('batch_receipt is missing or does not match this manga, chapter, batch and context. Copy BATCH_RECEIPT exactly from the current prompt: '+json.dumps(receipt))
+    try:
+        from app.memory import normalize
+        unsure_ids=[pid for beat in beats if beat and beat.get('unsure') for pid in beat['panel_ids']]
+        facts=normalize(payload.get('memory',[]),expected,unsure_ids) if isinstance(payload,dict) else []
+        summary=payload.get('chapter_summary','') if isinstance(payload,dict) else ''
+        if not isinstance(summary,str) or len(summary)>1200:raise ValueError('chapter_summary must be a string of at most 1200 characters.')
+    except ValueError as exc:validation['errors'].append(str(exc));facts=[];summary=''
+    if require_receipt and isinstance(payload,dict):
+        for field in ('chapter_summary','memory'):
+            if field not in payload:validation['errors'].append(f'{field} is required by the fresh-chat format. Return the requested memory metadata without rewriting narration.')
+        for index,beat in enumerate(beats,1):
+            if beat and isinstance(beat.get('narration'),str) and beat['narration'].strip() and not beat.get('anchors'):
+                validation['errors'].append(f'Beat {index}: add exact phrase anchors for every selected panel, keeping its narration unchanged.')
+                validation['fix_beats']=sorted(set(validation['fix_beats'])|{index})
+    validation['ok']=not validation['errors'] and not validation['issues']
     if not validation['ok']:
         validation.update(can_correct=isinstance(payload,dict) and isinstance(payload.get('beats'),list) and bool(payload['beats']),
                           redo_message=redo_message(validation,payload,expected))
         storage.write_json(pending_file,{'format':'beats-v1','fingerprint':fingerprint,'context_token':previous['token'],
                            'payload':payload,'validation':validation})
         return validation
-    state=load_state(manga_id);state['schema_version']=4
+    state=load_state(manga_id);state['schema_version']=6
     chapter_state=state['chapters'].setdefault(chapter,{'batches':{}})
+    old=chapter_state['batches'].get(batch_id)
+    if old and state.get('legacy_cast_after')==[chapter,batch_id]:
+        old=dict(old,cast=old.get('cast',state.get('legacy_cast',[])))
+        state.update(legacy_cast=[],legacy_cast_after=None)
+    if old:chapter_state.setdefault('history',{}).setdefault(batch_id,[]).append(old)
     chapter_state['batches'][batch_id]={'format':'beats-v1','fingerprint':fingerprint,'context_token':previous['token'],
-                                      'beats':beats,'continuity':continuity,'final_recap':bool(final_recap)}
-    combined=[];digest=_digest([]);preceding=[]
+                                      'beats':beats,'continuity':continuity,'cast':cast,'chapter_summary':summary,'memory':facts,'final_recap':bool(final_recap)}
+    combined=[];preceding=[];seed=previous.get('chapter_seed')
     for item in batches(manga_id,chapter):
+        digest=_digest({'earlier_chapters':seed,'batches':preceding}) if seed else _digest(preceding)
         entry=chapter_state['batches'].get(item['id'])
-        if not entry or entry.get('format')!='beats-v1' or entry['fingerprint']!=item['fingerprint'] or entry.get('context_token')!=digest:break
-        combined.extend(entry['beats']);preceding.append(dict(entry,id=item['id']));digest=_digest(preceding)
+        if not entry or entry.get('fingerprint')!=item['fingerprint'] or entry.get('context_token')!=digest:break
+        combined.extend(entry['beats']);preceding.append(dict(entry,id=item['id']))
     chapter_state['beats']=combined
     state['cast']=merge_cast(state['cast'],cast)
     storage.write_json(state_path(manga_id),state)
     pending_file.unlink(missing_ok=True)
-    prompt_file(manga_id,chapter,batch_id,final_recap)
     selected=sum(len(b['panel_ids']) for b in beats)
     return {'ok':True,'imported_beats':len(beats),'selected_panels':selected,'skipped_panels':len(expected)-selected,
             'chapter_beats':len(combined),'cast_count':len(state['cast'])}

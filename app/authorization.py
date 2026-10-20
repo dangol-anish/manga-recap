@@ -2,12 +2,13 @@ from app import storage
 
 
 def processing_allowed(manga_id, chapter):
-    policy = storage.read_json(storage.DATA / 'model-validation.json', {})
-    return (policy.get('panel_only_validated') is True
-            and policy.get('allowed_manga_id') == manga_id
-            and chapter in policy.get('allowed_chapters', []))
+    policy=storage.read_json(storage.DATA/'model-validation.json',{})
+    if policy.get('panel_only_validated') is not True:return False
+    manga=next((m for m in storage.read_json(storage.DATA/'library.json',[]) if m['id']==manga_id),None)
+    if manga is None:return False
+    return any(p.name==chapter for p in storage.chapters(manga))
 
 
 def require_authorized(manga_id, chapter):
     if not processing_allowed(manga_id, chapter):
-        raise PermissionError('Processing is approved only for this manga’s Chapter 1 and Chapter 12.')
+        raise PermissionError('Select a registered chapter with validated panel detection.')

@@ -121,11 +121,11 @@ class StageOneTests(unittest.TestCase):
             'panel_only_validated':True,'allowed_manga_id':manga['id'],
             'allowed_chapters':['Chapter 1','Chapter 12']})
         from app.authorization import processing_allowed
-        self.assertTrue(processing_allowed(manga['id'],'Chapter 1'))
-        self.assertTrue(processing_allowed(manga['id'],'Chapter 12'))
+        self.assertTrue(processing_allowed(manga['id'],'Chapter001'))
+        self.assertFalse(processing_allowed(manga['id'],'Chapter 12'))
         self.assertFalse(processing_allowed(manga['id'],'Chapter 2'))
         self.assertFalse(processing_allowed('another-manga','Chapter 1'))
-        response=self.client.post(f'/api/manga/{manga["id"]}/chapters/Chapter001/start')
+        response=self.client.post(f'/api/manga/{manga["id"]}/chapters/Missing/start')
         self.assertEqual(response.status_code,403)
         self.assertIsNone(main.process)
 

@@ -13,3 +13,5 @@ $('#generate').onclick=()=>generate('/generate');$('#stop').onclick=stopPlayback
 refresh();setInterval(refresh,2000);
 
 document.querySelector("#video-link").href=`/video/${encodeURIComponent(manga)}/${encodeURIComponent(chapter)}`;
+
+document.querySelector("h1").textContent=chapter+" audio";document.title=chapter+" audio · Manga Recap";

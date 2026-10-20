@@ -1,0 +1,42 @@
+{
+  "tests_passed": 79,
+  "generic_stages": [
+    "detection",
+    "panel review and preparation",
+    "batch narration export/import",
+    "speech and phrase alignment",
+    "video export"
+  ],
+  "isolation_tested": "Two synthetic manga, multiple naturally sorted chapters, repeated panel IDs and distinct output paths",
+  "context_limit_characters": 18000,
+  "long_history_test_chapters": 80,
+  "receipt_checks": [
+    "wrong manga/chapter/batch rejected",
+    "stale panel/context receipt requires new full reply"
+  ],
+  "memory": [
+    "original per-chapter summaries",
+    "confirmed and uncertain sourced facts",
+    "bounded relevance/recency selection",
+    "searchable/editable history",
+    "previous revisions retained",
+    "upstream changes invalidate downstream imports",
+    "legacy cast does not leak into earlier context"
+  ],
+  "real_fixture_mp4_export": "passed with imported phrase anchors and mocked speech; no real additional chapter processed",
+  "browser_verified": [
+    "Library chapter controls",
+    "story memory search",
+    "cross-chapter context in narration page",
+    "prompt download"
+  ],
+  "existing_work_hashes_unchanged": true,
+  "existing_video_ready": true,
+  "existing_video_render_token": "45d4b62763051965086323a1a99d60dde5b0fde3886c584561bab24493aa5a5a",
+  "real_cross_chapter_prompt_context": {
+    "preceding_batches": 2,
+    "cast_entries": 6
+  },
+  "automatic_processing": false,
+  "new_real_detection_or_tts": false
+}

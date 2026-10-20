@@ -120,9 +120,9 @@ class NarrationTests(unittest.TestCase):
         with zipfile.ZipFile(path) as archive:self.assertEqual(len(archive.namelist()),20)
         url='/api/narration/test/Chapter%201';self.assertEqual(self.client.get(url).status_code,200)
         self.assertEqual(self.client.get(url+'/prompt?batch_id=batch-002').status_code,409)
-        response=self.client.post(url+'/batch-001/import',json={'fingerprint':b['fingerprint'],'reply':json.dumps(self.payload())})
+        response=self.client.post(url+'/batch-001/import',json={'fingerprint':b['fingerprint'],'reply':json.dumps(self.payload()),'require_receipt':False})
         self.assertEqual(response.status_code,200);self.assertEqual(response.json()['selected_panels'],3)
-        self.assertEqual(self.client.get('/api/narration/test/Chapter%2012/prompt').status_code,403)
-        self.assertEqual(self.client.post('/api/narration/test/Chapter%2012/batch-001/import',json={'fingerprint':b['fingerprint'],'reply':json.dumps(self.payload())}).status_code,403)
+        self.assertEqual(self.client.get('/api/narration/test/Chapter%2012/prompt').status_code,404)
+        self.assertEqual(self.client.post('/api/narration/test/Chapter%2012/batch-001/import',json={'fingerprint':b['fingerprint'],'reply':json.dumps(self.payload()),'require_receipt':False}).status_code,404)
 
 if __name__=='__main__':unittest.main()
