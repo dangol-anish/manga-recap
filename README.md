@@ -28,6 +28,14 @@ The app discovers selected page lists before showing determinate page progress. 
 
 Source adapters are independent Python implementations in this repo. They use HTTPX and the standard HTML parser, without a browser engine or paid service. Current public-site access can change; blocked/changed source responses are reported explicitly. No PDF/CBZ conversion.
 
+## Stage 2 Renumbering
+
+Open **Stage 2: Renumbering** in the sidebar after manually deleting unwanted images in Finder or File Explorer. Refresh folders, select chapter folders from `manga/`, and click **Renumber selected chapters**. There is no preview step. Each completed chapter has a right-aligned **Open folder** button for Finder or File Explorer. Each selected chapter starts at `0000`, using natural filename order; original extensions (including their case) and image bytes are preserved. No images are deleted or processed by detection.
+
+Renumbering uses temporary staging and exclusive hard links instead of an overwriting rename. This works on standard local APFS/NTFS filesystems. Filesystem support failures preserve the images and report the problem. A JSON journal in `data/renumbering/` and a hidden chapter marker allow interrupted operations to continue: refresh, select the affected chapter and press **Renumber selected chapters** again. Do not manually change chapter files while renumbering is in progress. Collisions and stale previews stop safely instead of overwriting files.
+
+A cleaned/renumbered download folder is protected against Downloader resume so it cannot restore the unwanted images you deleted. Existing download history and original manifests remain saved. Renumbering is always started explicitly; adding the page does not rename real chapters automatically.
+
 ## Daily workflow
 
 1. Put manga inside this repo: `manga/MyManga/<chapter folders>/<page images>`. Natural filename sorting supports numbered images and names such as `page_001.jpg`. Keep a chapter's files stable after importing its narration. Add the manga in Library and select right-to-left or left-to-right reading direction.

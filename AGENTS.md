@@ -1,3 +1,7 @@
+# Current approved step: Stage 2 Renumbering
+
+- Implement chapter-folder selection and explicit renumbering of remaining images from `0000` in natural filename order, preserving original extensions and never overwriting files. Keep the approved dark glass styling. Renumber immediately when the user presses the button, without a preview step. After success, provide right-aligned native Open folder buttons per chapter. Operate only on the user-selected repo-local chapters; do not delete images, run detection or change other stages. Test with isolated fixtures, show the page and stop. No automatic commit or push.
+
 # Local storage and platform requirements
 
 - Support macOS and Windows. Save downloaded images inside the current cloned repository under `manga/`, and download state under `data/`. Resolve paths from the repository location, never a hardcoded user/home/drive path. Keep both directories ignored by Git; do not push downloaded or generated files.

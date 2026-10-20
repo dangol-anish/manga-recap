@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Renumbering · Manga Recap</title>
+<link rel="stylesheet" href="/static/sidebar.css?v=stages-2"><link rel="stylesheet" href="/static/downloader.css?v=folder-2">
+<link rel="stylesheet" href="/static/renumbering.css?v=2">
+<script src="/static/renumbering.js?v=2" defer></script>
+</head>
+<body class="with-stage-sidebar">
+<aside class="stage-sidebar" aria-label="Workflow stages">
+<div class="stage-brand">Manga Recap</div><p class="stage-caption">Workflow</p>
+<ol class="stage-list"><li><a class="stage-item" href="/"><svg class="stage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg><span class="stage-label"><span class="stage-kicker">Stage 1:</span> <span class="stage-name">Downloader</span></span></a></li><li><a class="stage-item" href="/renumbering" aria-current="page"><svg class="stage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11M3 4h1v3M3 11h2l-2 3h2M3 18h2v3H3"/></svg><span class="stage-label"><span class="stage-kicker">Stage 2:</span> <span class="stage-name">Renumbering</span></span></a></li></ol>
+<a class="library-shortcut" href="/library">Existing library <span aria-hidden="true">↗</span></a>
+</aside>
+<main>
+<header><div><p class="overline">Stage 2</p><h1>Renumbering</h1><p class="subtitle">Clean up the names. Keep your reading order.</p></div><span class="local"><i></i> Local workspace</span></header>
+<section class="surface" aria-labelledby="folders-title">
+<div class="section-head"><div><h2 id="folders-title">Chapter folders</h2><p class="muted">After removing unwanted images in Finder or File Explorer, select the folders to renumber.</p></div><button class="secondary" id="refresh-folders" type="button">Refresh folders</button></div>
+<div class="renumber-tools"><div class="manga-filter"><label for="manga-filter">Manga</label><select id="manga-filter"><option value="">All manga</option></select></div><div class="selection-tools"><button class="quiet" id="select-folders" type="button">Select visible</button><button class="quiet" id="clear-folders" type="button">Clear</button><span class="muted" id="selected-count">0 selected</span></div></div>
+<div class="chapter-list" id="folder-list" aria-label="Available chapter folders"></div>
+<p class="muted" id="folder-empty" hidden>No chapter images found inside manga/. Download chapters first, then refresh.</p>
+<div class="renumber-actions"><p class="muted">Each chapter starts at <code>0000</code>. Extensions stay unchanged.</p><button id="apply-numbering" type="button" disabled>Renumber selected chapters</button></div>
+</section>
+<p id="renumber-notice" role="status" aria-live="polite"></p>
+<section class="surface" id="rename-results" hidden aria-labelledby="results-title"><h2 id="results-title">Results</h2><div id="result-list"></div></section>
+</main>
+</body>
+</html>

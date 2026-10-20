@@ -74,6 +74,7 @@ def summary(job):
     value['failed_pages'] = sum(sum(p.get('status') == 'failed' for p in c.get('pages', [])) for c in chapters)
     value['discovered_chapters'] = sum(c.get('discovered', False) for c in chapters)
     value['completed_chapters'] = sum(c.get('status') == 'complete' for c in chapters)
+    value['resume_blocked'] = any((destination(c['folder']) / '.renumbering.json').exists() for c in chapters)
     value['elapsed_seconds'] = round(value.get('elapsed_seconds', 0) + (time.monotonic() - active['started'] if active and active['id'] == value['id'] else 0), 1)
     for chapter in chapters:
         chapter['total_pages'] = len(chapter.get('pages', []))
@@ -224,6 +225,9 @@ def start(job):
     from app.tasks import lock as task_lock, ensure_idle
     with task_lock, lock:
         ensure_idle()
+        for chapter in job['chapters']:
+            if (destination(chapter['folder']) / '.renumbering.json').exists():
+                raise ValueError('This chapter has been cleaned or renumbered. Download resume is disabled to protect your edits.')
         # Preflight every destination before claiming any folders.
         for chapter in job['chapters']:
             folder = destination(chapter['folder'])

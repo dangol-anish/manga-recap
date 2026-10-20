@@ -78,9 +78,9 @@ function render(){
   else progress.value=job.status==='complete'?100:percent;
   $('#progress-label').textContent=planning?`Page lists loaded: ${job.discovered_chapters} / ${job.chapters.length} chapters`:`${job.verified_pages} / ${job.total_pages} pages verified${job.failed_pages?` · ${job.failed_pages} failed`:''}`;
   $('#chapter-progress').textContent=`${job.completed_chapters} / ${job.chapters.length} chapters complete`;
-  $('#elapsed').textContent=duration(job.elapsed_seconds);$('#job-message').textContent=job.message;$('#destination').textContent=job.chapters.length===1?job.chapters[0].folder:job.folder;$('#open-folder-button').disabled=folderBusy;
+  $('#elapsed').textContent=duration(job.elapsed_seconds);$('#job-message').textContent=job.message+(job.resume_blocked?' These folders were renumbered; download resume is disabled to protect your edits.':'');$('#destination').textContent=job.chapters.length===1?job.chapters[0].folder:job.folder;$('#open-folder-button').disabled=folderBusy;
   $('#stop-button').hidden=!['running','stopping'].includes(job.status);$('#stop-button').disabled=busy||job.status==='stopping';
-  $('#resume-button').hidden=!['paused','failed'].includes(job.status);$('#resume-button').disabled=busy||running();
+  $('#resume-button').hidden=job.resume_blocked||!['paused','failed'].includes(job.status);$('#resume-button').disabled=busy||running();
   const chapterSignature=JSON.stringify([job.id,job.chapters]);
   if(chapterSignature!==resultsSignature){
     resultsSignature=chapterSignature;$('#chapter-results').replaceChildren();

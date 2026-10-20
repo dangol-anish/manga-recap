@@ -110,6 +110,11 @@ def library_page():
     return FileResponse(ROOT / 'app/static/downloader.html')
 
 
+@app.get('/renumbering')
+def renumbering_page():
+    return FileResponse(ROOT / 'app/static/renumbering.html')
+
+
 @app.get('/library')
 def existing_library_page():
     return FileResponse(ROOT / 'app/static/index.html')
@@ -601,3 +606,6 @@ def chapter_alignment_status(manga_id: str,chapter_name: str):
 # Stage 1 downloads are independent of panel detection.
 from app.downloader import router as downloader_router
 app.include_router(downloader_router)
+
+from app.renumbering import router as renumbering_router
+app.include_router(renumbering_router)
