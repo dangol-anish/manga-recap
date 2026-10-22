@@ -67,7 +67,8 @@ def folders():
         pending = saved and saved.get('status') != 'complete'
         if page_files or pending:
             result.append({'id': sha256(relative.encode()).hexdigest()[:32], 'folder': relative, 'manga': path.parent.name if path.parent != root else path.name, 'name': path.name, 'images': len(page_files), 'pending': bool(pending)})
-    return sorted(result, key=lambda c: storage.natural_key(PurePosixPath(c['folder'])))
+    from app.chapter_names import chapter_sort_key
+    return sorted(result, key=lambda c: (str(PurePosixPath(c['folder']).parent), chapter_sort_key(c['name'])))
 
 
 def mapping(files):

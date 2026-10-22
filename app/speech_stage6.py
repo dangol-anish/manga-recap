@@ -1,5 +1,4 @@
 """Stage 6 speech from the rebuilt narration store; never reads legacy media."""
-import hashlib
 import math
 from pathlib import Path
 import shutil
@@ -32,10 +31,8 @@ def root(mid,chapter):
 
 
 def checksum(path):
-    digest=hashlib.sha256()
-    with path.open('rb') as stream:
-        for chunk in iter(lambda:stream.read(1024*1024),b''):digest.update(chunk)
-    return digest.hexdigest()
+    from app.read_cache import file_hash
+    return file_hash(path)
 
 
 def source(mid,chapter):

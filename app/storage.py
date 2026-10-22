@@ -53,8 +53,9 @@ def pages(chapter):
 
 
 def chapters(manga):
+    from app.chapter_names import chapter_sort_key
     folder = local_path(manga['folder'])
-    return sorted((p for p in folder.iterdir() if not p.is_symlink() and p.is_dir() and not p.name.startswith('.') and pages(p)), key=natural_key)
+    return sorted((p for p in folder.iterdir() if not p.is_symlink() and p.is_dir() and not p.name.startswith('.') and pages(p)), key=lambda p: chapter_sort_key(p.name))
 
 
 def page_output(manga, chapter, page):

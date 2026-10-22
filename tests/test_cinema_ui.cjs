@@ -40,5 +40,27 @@ class Element{
  get('#beat').value='1';get('#beat').events.change();const edit=get('#timings').querySelectorAll('input')[0];edit.value='.7';edit.events.input();server.render_token='9'.repeat(64);await vm.runInContext('refresh()',context);assert.equal(get('#save').disabled,true);assert.match(get('#notice').textContent,/another tab/);
  const html=fs.readFileSync('app/static/cinema.html','utf8');assert.match(html,/<video id="preview" controls playsinline/);assert(!html.includes('<audio'));assert(!html.includes('panel-outgoing'));assert(!fs.readFileSync('app/static/cinema.js','utf8').includes('requestAnimationFrame'));
  assert(!calls.some(c=>c.url.includes('/api/speech/')&&c.options?.method));
+ // A chapter load must supersede an in-flight poll, without stale UI writes.
+ const originalFetch=context.fetch;let releaseOld;let hold=true;
+ const oldResponse=clone(server);
+ context.fetch=async(url,options)=>{
+  if(hold){hold=false;return new Promise(resolve=>{releaseOld=()=>resolve({ok:true,json:async()=>oldResponse});});}
+  return originalFetch(url,options);
+ };
+ const oldPoll=vm.runInContext('refresh()',context);
+ get('#chapter-select').value='Chapter 2';server.chapter='Chapter 2';
+ await vm.runInContext('loadChapter()',context);
+ assert.equal(get('#chapter-title').textContent,'Chapter 2');
+ assert.equal(get('#chapter-content').hidden,false);
+ releaseOld();await oldPoll;
+ assert.equal(get('#chapter-title').textContent,'Chapter 2','Old poll must not overwrite the new chapter');
+ // An initial failed load must retry even though state is still null.
+ let fail=true;context.fetch=async(url,options)=>{if(fail){fail=false;throw Error('Temporary connection failure');}return originalFetch(url,options);};
+ get('#chapter-select').value='Chapter 3';server.chapter='Chapter 3';
+ await vm.runInContext('loadChapter()',context);
+ assert.equal(vm.runInContext('state',context),null);
+ await vm.runInContext('poll()',context);
+ assert.equal(get('#chapter-title').textContent,'Chapter 3');
+ assert.equal(get('#chapter-content').hidden,false);
  console.log('Native video preview: forward/backward seeking, no reload/rewind on polling, build/rebuild, stale media blocking and timing edits passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

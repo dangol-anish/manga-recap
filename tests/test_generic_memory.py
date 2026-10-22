@@ -56,6 +56,39 @@ class GenericTests(unittest.TestCase):
         self.assertNotIn(future,narration.prompt_text('a','Episode 10'))
         first=narration.prompt_text('a','Episode 2');self.assertNotIn(name,first)
         self.assertEqual(narration.status('a','Episode 10')['imported_beats'],1)
+
+    def test_fractional_chapter_order_and_future_history_exclusion(self):
+        from types import SimpleNamespace
+        from app.chapter_names import chapter_sort_key
+        names=['Chapter 1.5','Chapter 1.25','Chapter 1.05','Chapter 1','Chapter 2']
+        self.assertEqual(sorted(names,key=chapter_sort_key),
+                         ['Chapter 1','Chapter 1.05','Chapter 1.25','Chapter 1.5','Chapter 2'])
+        entry={'format':'beats-v1','fingerprint':'fixture','context_token':memory.digest([]),
+               'beats':[],'continuity':{'summary':'A later event.','open_threads':[]}}
+        state={'chapters':{'Chapter 1.5':{'batches':{'batch-001':entry}}}}
+        frozen=json.dumps(state,sort_keys=True)
+        backend=SimpleNamespace(load_state=lambda _:state,
+                                batches=lambda *_:[{'id':'batch-001','fingerprint':'fixture'}])
+        _,history,token,_=memory.lineage('fixture','Chapter 1.25','batch-001',backend)
+        self.assertEqual(history,[]);self.assertEqual(token,memory.digest([]))
+        self.assertEqual(json.dumps(state,sort_keys=True),frozen)
+        state['chapters']={'Chapter 1.25':{'batches':{'batch-001':entry}}}
+        _,history,_,_=memory.lineage('fixture','Chapter 1.5','batch-001',backend)
+        self.assertEqual([h['chapter'] for h in history],['Chapter 1.25'])
+
+    def test_changed_decimal_lineage_is_stale_without_rewriting_saved_work(self):
+        from types import SimpleNamespace
+        # Previously 1.5 was imported first, then 1.25 using that later history.
+        first={'format':'beats-v1','fingerprint':'fixture','context_token':memory.digest([]),'beats':[]}
+        old_seed=memory.digest([None,{'chapter':'Chapter 1.5','batches':[dict(first,id='batch-001')]}])
+        second={**first,'context_token':memory.digest({'earlier_chapters':old_seed,'batches':[]})}
+        state={'chapters':{'Chapter 1.5':{'batches':{'batch-001':first}},
+                           'Chapter 1.25':{'batches':{'batch-001':second}}}}
+        frozen=json.dumps(state,sort_keys=True)
+        backend=SimpleNamespace(load_state=lambda _:state,
+                                batches=lambda *_:[{'id':'batch-001','fingerprint':'fixture'}])
+        with self.assertRaises(FileExistsError):memory.lineage('fixture','Chapter 2','batch-001',backend)
+        self.assertEqual(json.dumps(state,sort_keys=True),frozen)
     def test_stale_upstream_narration_and_memory_block_later_audio(self):
         self.assertTrue(self.submit()['ok']);self.assertTrue(self.submit(ch='Episode 10')['ok'])
         state=memory.overview('a');entry=state['entries'][0]

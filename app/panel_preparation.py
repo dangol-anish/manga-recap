@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from app import storage, detection, renumbering, review
 from app.detection_worker import source_hash, signature, cache_valid
 from app.runtime import open_system_folder
+from app.read_cache import memoized_read
 
 router = APIRouter(prefix='/api/preparation')
 lock = threading.RLock()
@@ -36,6 +37,7 @@ def load_job(ident):
     return value
 
 
+@memoized_read
 def context(ident, require_complete=True):
     for manga in detection.catalog()['manga']:
         for item in manga['chapters']:

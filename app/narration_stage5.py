@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response, JSONResponse
 from pydantic import BaseModel, Field
 from app import storage, panel_preparation as panels, detection, narration, memory
+from app.read_cache import memoized_read
 
 router=APIRouter(prefix='/api/story')
 lock=threading.RLock()
@@ -17,6 +18,7 @@ _digest=narration._digest
 merge_cast=narration.merge_cast
 
 
+@memoized_read
 def resolve(mid,chapter):
     for manga in detection.catalog()['manga']:
         if manga['id']==mid:
@@ -30,6 +32,7 @@ def state_path(mid):
     return storage.DATA/'manga'/mid/'story-stage5.json'
 
 
+@memoized_read
 def load_state(mid):
     saved=storage.read_json(state_path(mid))
     if saved is not None:return saved
@@ -51,6 +54,7 @@ def pending_path(mid,bid,chapter):
     return root(mid,chapter)/'pending'/(bid+'.json')
 
 
+@memoized_read
 def batches(mid,chapter):
     info,files,report=resolve(mid,chapter);ids=panels.page_ids(files);records=[]
     if not files:raise ValueError('No chapter pages found.')
@@ -80,6 +84,7 @@ def find_batch(mid,chapter,bid,fingerprint=None):
     return batch
 
 
+@memoized_read
 def story_context(mid,chapter,bid):
     return memory.packet(mid,chapter,bid,backend=sys.modules[__name__])
 

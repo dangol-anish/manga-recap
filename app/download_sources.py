@@ -4,6 +4,7 @@ from urllib.parse import urljoin, urlsplit
 import ipaddress
 import re
 import socket
+from decimal import Decimal
 
 import httpx
 
@@ -78,7 +79,7 @@ def parse(html):
 
 def chapter_sort(item):
     number = re.search(r'(?:chapter|episode|ch\.?)\s*#?\s*(\d+(?:\.\d+)?)', item['name'], re.I)
-    if number: return (0, float(number[1]), item['id'])
+    if number: return (0, Decimal(number[1]), item['id'])
     return (1, item['name'].casefold(), item['id'])
 
 

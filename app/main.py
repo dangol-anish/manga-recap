@@ -114,6 +114,10 @@ async def local_requests(request: Request, call_next):
     origin = request.headers.get('origin')
     if origin and origin not in {f'http://{request.headers.get("host")}', f'https://{request.headers.get("host")}'}:
         return JSONResponse({'detail': 'Use this app from its local page.'}, status_code=403)
+    if request.method == 'GET':
+        from app.read_cache import read_snapshot
+        with read_snapshot():
+            return await call_next(request)
     return await call_next(request)
 
 

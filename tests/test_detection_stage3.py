@@ -233,5 +233,56 @@ raise SystemExit(worker.main(Path(sys.argv[2])))
         finally:handle.close()
         self.assertFalse(d.busy())
 
+    def test_fresh_install_validation_enables_detector_without_manga_changes(self):
+        from scripts.validate_model import validate
+        path=storage.DATA/'model-validation.json';path.unlink()
+        original={p.name:p.read_bytes() for p in self.folder.iterdir()}
+        self.assertFalse(d.ready()['ready'])
+        report=validate(FakeDetector)
+        self.assertTrue(d.ready()['ready']);self.assertEqual(report['revision'],w.REVISION)
+        self.assertEqual({p.name:p.read_bytes() for p in self.folder.iterdir()},original)
+        self.assertFalse((storage.DATA/'detection/jobs').exists())
+        storage.write_json(path,{**report,'revision':'old'})
+        self.assertFalse(d.ready()['ready'])
+
+    def test_fractional_chapters_are_listed_and_selected_in_numeric_order(self):
+        for name in ('Chapter 1.5','Chapter 1.25'):
+            folder=self.folder.parent/name;folder.mkdir()
+            Image.new('RGB',(100,100),'white').save(folder/'0000.png')
+        chapters=d.catalog()['manga'][0]['chapters']
+        expected=['Chapter 1','Chapter 1.25','Chapter 1.5']
+        self.assertEqual([c['name'] for c in chapters],expected)
+        self.assertEqual([c['name'] for c in d.selection([c['id'] for c in reversed(chapters)],'rtl')],expected)
+
+    def test_failed_model_validation_preserves_existing_record(self):
+        from scripts.validate_model import validate
+        path=storage.DATA/'model-validation.json';original=path.read_bytes()
+        with self.assertRaises(RuntimeError):validate(Mock(side_effect=RuntimeError('model unavailable')))
+        self.assertEqual(path.read_bytes(),original)
+        class Empty(FakeDetector):
+            def detect(self,image,direction):return []
+        with self.assertRaises(ValueError):validate(Empty)
+        self.assertEqual(path.read_bytes(),original)
+
+    def test_resume_retries_inference_errors_but_preserves_valid_pages(self):
+        class InterruptedInference(FakeDetector):
+            count=0
+            def detect(self,image,direction):
+                self.count+=1
+                if self.count==2:raise RuntimeError('temporary inference failure')
+                return super().detect(image,direction)
+        job=self.job();self.assertEqual(self.run_job(job,InterruptedInference),1)
+        self.assertEqual(job['status'],'failed')
+        folder=d.output(job['chapters'][0]);original=(folder/'pages/0000.png.json').read_bytes()
+        # Simulate an exception report written by the old app, before retryable existed.
+        report=storage.read_json(folder/'report.json')
+        for result in report['page_results']:result.pop('retryable',None)
+        storage.write_json(folder/'report.json',report)
+        FakeDetector.calls=[];self.reset(job)
+        self.assertEqual(self.run_job(job),0)
+        self.assertEqual(FakeDetector.calls,['rtl'])
+        self.assertEqual(d.summary(job)['valid_pages'],2)
+        self.assertEqual((folder/'pages/0000.png.json').read_bytes(),original)
+
 
 if __name__=='__main__':unittest.main()

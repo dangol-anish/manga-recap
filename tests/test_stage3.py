@@ -100,7 +100,12 @@ class NarrationTests(unittest.TestCase):
     def test_prompt_manifest_grounding_and_final_choice(self):
         prompt=narration.prompt_text('test','Chapter 1')
         self.assertTrue(prompt.startswith(MASTER));self.assertIn(json.dumps(self.batches[0]['panel_ids']),prompt)
-        self.assertIn('Never invent',prompt);self.assertIn('Do not invent dialogue',prompt)
+        for instruction in ('Inspect every image in CURRENT_PAGES order',
+                            'Never invent IDs or swap labels to hide a mismatch',
+                            'Never use remembered manga plots, adaptations or outside sources to fill gaps',
+                            'Do not invent a bridge to make events connect',
+                            'Remove guesses, unsupported motives, exaggerations and filler'):
+            self.assertIn(instruction,prompt)
         self.assertIn('FINAL_RECAP: false',prompt)
         self.assertIn('FINAL_RECAP: true',narration.prompt_text('test','Chapter 1',final_recap=True))
         self.assertTrue(self.submit(self.payload(),final_recap=True)['ok'])

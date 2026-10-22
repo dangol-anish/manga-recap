@@ -12,7 +12,15 @@ From this repository:
 
 On Windows, run `run.bat` from Command Prompt or `.\run.bat` from PowerShell after creating `.venv` and installing `requirements.txt`. The Windows virtual environment uses `.venv\Scripts\python.exe`; macOS uses `.venv/bin/python`.
 
-Open <http://127.0.0.1:8000/>. Dependencies live in this repo's `.venv`; FFmpeg and ffprobe must be available. To install from scratch, create `.venv`, install `requirements.txt`, and run `scripts/install_model.py` with that environment. The downloader installs the pinned official `ragavsachdeva/magiv3` model, revision `49c73a225122d53adbaa26d53868be81a57706e2`, into `vendor/magiv3`. Detection also requires a successful model-validation record; the existing installation already has one. Historical smoke/validation scripts remain in `scripts/`.
+Open <http://127.0.0.1:8000/>. Dependencies live in this repo's `.venv`; FFmpeg and ffprobe must be available. To install from scratch, create `.venv` and install `requirements.txt`. Then install and explicitly validate the pinned official `ragavsachdeva/magiv3` model, revision `49c73a225122d53adbaa26d53868be81a57706e2`:
+
+```sh
+# macOS, from the repository root
+.venv/bin/python -m scripts.install_model
+.venv/bin/python -m scripts.validate_model
+```
+
+On Windows, use `.venv\Scripts\python.exe -m scripts.install_model` followed by `.venv\Scripts\python.exe -m scripts.validate_model`. Validation runs normal detection on a synthetic image, checks panel filtering and geometry, and records the validated model revision in ignored `data/model-validation.json`. It never reads or processes manga chapters. A failed check does not overwrite an existing record. Stage 3 stays disabled until validation succeeds; opening the app never runs this check automatically. Model files remain in ignored `vendor/magiv3`.
 
 ## Portable local storage
 

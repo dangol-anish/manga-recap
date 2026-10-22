@@ -19,10 +19,8 @@ MODE = 'normal-panel-label-filter'
 
 
 def source_hash(path):
-    h = sha256()
-    with path.open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''): h.update(chunk)
-    return h.hexdigest()
+    from app.read_cache import file_hash
+    return file_hash(path)
 
 
 def signature(checksum, direction):
@@ -32,6 +30,15 @@ def signature(checksum, direction):
 def read_safe(path, default=None):
     try: return default if path.is_symlink() else storage.read_json(path, default)
     except (OSError, ValueError): return default
+
+
+def retryable_failure(result):
+    if 'retryable' in result:
+        return result['retryable']
+    # Older reports mixed inference exceptions with geometry flags. Geometry
+    # reasons have these fixed prefixes; retry unknown/exception reasons safely.
+    reasons = result.get('reasons', [])
+    return not reasons or any(not reason.startswith(('Panel ', 'No panels detected.', 'Invalid page dimensions.')) for reason in reasons)
 
 
 def preview(image, boxes, target, stamp):
@@ -111,13 +118,14 @@ def run(job, detector_factory=Detector):
                         if read_safe(picture.with_suffix('.metadata.json'), {}).get('signature') != stamp or not picture.exists():
                             with Image.open(page) as image: preview(image.convert('RGB'), [p['box'] for p in saved['panels']], picture, stamp)
                         result = {'page': name, 'index': page_index, 'status': 'valid', 'panels': len(saved['panels']), 'seconds': saved['seconds'], 'signature': stamp, 'cached': True, 'preview': True, 'reasons': []}
-                    elif previous and previous.get('signature') == stamp and previous['status'] == 'flagged' and (not previous.get('preview') or (picture.exists() and read_safe(picture.with_suffix('.metadata.json'), {}).get('signature') == stamp)):
+                    elif previous and previous.get('signature') == stamp and previous['status'] == 'flagged' and not retryable_failure(previous) and (not previous.get('preview') or (picture.exists() and read_safe(picture.with_suffix('.metadata.json'), {}).get('signature') == stamp)):
                         result = {**previous, 'index': page_index, 'cached': True}
                     else:
-                        boxes, image, errors = [], None, []
+                        boxes, image, errors, retryable = [], None, [], False
                         try:
                             with Image.open(page) as original: image = original.convert('RGB')
-                        except (OSError, ValueError, Image.DecompressionBombError) as exc: errors = [f'Cannot read page image: {exc}']
+                        except (OSError, ValueError, Image.DecompressionBombError) as exc:
+                            errors = [f'Cannot read page image: {exc}']; retryable = True
                         if not errors:
                             if detector is None:
                                 job['message'] = 'Loading Magi v3. The first page may take longer.'; detection.save(job)
@@ -128,11 +136,12 @@ def run(job, detector_factory=Detector):
                             try:
                                 boxes = detector.detect(image.convert('L').convert('RGB'), chapter['direction'])
                                 errors = panel_errors(boxes, image.width, image.height)
-                            except Exception as exc: errors = [f'{type(exc).__name__}: {exc}']
+                            except Exception as exc:
+                                errors = [f'{type(exc).__name__}: {exc}']; retryable = True
                         if source_hash(page) != checksum: raise ValueError('A source image changed during detection. Stop editing this chapter and resume.')
                         if image is not None: preview(image, boxes, picture, stamp)
                         seconds = round(time.perf_counter() - page_started, 3)
-                        result = {'page': name, 'index': page_index, 'status': 'flagged' if errors else 'valid', 'panels': len(boxes), 'seconds': seconds, 'signature': stamp, 'cached': False, 'preview': image is not None, 'reasons': errors}
+                        result = {'page': name, 'index': page_index, 'status': 'flagged' if errors else 'valid', 'panels': len(boxes), 'seconds': seconds, 'signature': stamp, 'cached': False, 'preview': image is not None, 'reasons': errors, 'retryable': retryable}
                         archive(target, folder)
                         if not errors:
                             record = page_record(page, image, boxes, detector, seconds, chapter['direction'])
@@ -147,12 +156,13 @@ def run(job, detector_factory=Detector):
                     job['elapsed_seconds'] = round(previous_elapsed + time.perf_counter() - started,3)
                     job['message'] = f'{name}: {result["status"]}'
                     checkpoint(job, chapter, folder)
-                chapter['status'] = 'complete' if len(chapter['results']) == len(chapter['pages']) else 'paused'
+                chapter['status'] = ('failed' if any(r.get('retryable') for r in chapter['results']) else 'complete') if len(chapter['results']) == len(chapter['pages']) else 'paused'
                 chapter['elapsed_seconds'] = chapter_elapsed + time.perf_counter() - chapter_started
                 checkpoint(job, chapter, folder)
                 print(json.dumps(chapter['summary']), flush=True)
             completed = all(c['status'] == 'complete' for c in job['chapters'])
-            job.update(status='complete' if completed else 'paused', current_page=None, message='Selected chapters finished. Review any flagged pages.' if completed else 'Stopped. Completed pages are safe; resume when ready.')
+            failed = any(c['status'] == 'failed' for c in job['chapters'])
+            job.update(status='complete' if completed else 'failed' if failed else 'paused', current_page=None, message='Selected chapters finished. Review any flagged pages.' if completed else 'Some pages could not be processed. Resume to retry; valid pages are preserved.' if failed else 'Stopped. Completed pages are safe; resume when ready.')
     except Exception as exc:
         job.update(status='failed', message=f'{type(exc).__name__}: {exc}')
         print(job['message'], flush=True)

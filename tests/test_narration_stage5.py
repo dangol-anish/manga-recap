@@ -87,6 +87,27 @@ class StoryTests(unittest.TestCase):
         self.assertEqual(self.submit(batch_index=1).status_code,200)
         self.assertEqual(sum(b['imported'] for b in self.status()['batches']),2)
 
+    def test_status_hashes_each_page_once_and_import_still_rechecks_sources(self):
+        from app import read_cache
+        self.ready(21)
+        payload=self.payload()
+        read_cache._cached_hash.cache_clear()
+        with patch.object(read_cache,'_hash_file',wraps=read_cache._hash_file) as hashes:
+            first=self.client.get(self.api)
+            self.assertEqual(first.status_code,200)
+            self.assertEqual(hashes.call_count,21)
+            self.assertEqual(self.client.get(self.api).json(),first.json())
+            self.assertEqual(hashes.call_count,21)
+            batch=first.json()['batches'][0]
+            response=self.client.post(self.api+'/batch-001/import',json={
+                'reply':json.dumps(payload),'fingerprint':batch['fingerprint'],
+                'context_token':batch['context_token'],'revision':first.json()['revision']})
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertGreater(hashes.call_count,21)
+        # A changed upstream page is caught by the next GET, not hidden by cache.
+        Image.new('RGB',(100,150),'black').save(self.source/'0000.png')
+        self.assertNotEqual(self.client.get(self.api).status_code,200)
+
     def test_unknown_repeated_order_and_word_budget_errors_are_exact(self):
         self.ready();b=self.status()['batches'][0]
         for ids,text,expected in [(['p9999-1'],'One event.','unknown ID'),([b['panel_ids'][0]]*2,'One event.','Repeated ID'),(list(reversed(b['panel_ids'][:2])),'One event.','reading order'),([b['panel_ids'][0]],'word '*41,'word budget')]:

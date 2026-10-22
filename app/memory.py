@@ -1,8 +1,8 @@
 """Bounded, manga-scoped context assembled from original saved imports."""
 import json
 import re
-from pathlib import Path
 from app import storage
+from app.chapter_names import chapter_sort_key
 
 CONTEXT_LIMIT=18000
 
@@ -13,7 +13,7 @@ def digest(value):
 
 
 def ordered(state,current=None):
-    return sorted(set(state['chapters'])|({current} if current else set()),key=lambda s:storage.natural_key(Path(s)))
+    return sorted(set(state['chapters'])|({current} if current else set()),key=chapter_sort_key)
 
 
 def lineage(mid,chapter,batch_id,backend=None):
@@ -21,7 +21,7 @@ def lineage(mid,chapter,batch_id,backend=None):
     narration=backend or narration
     state=narration.load_state(mid);history=[];prior=None
     for name in ordered(state,chapter):
-        if storage.natural_key(Path(name))>storage.natural_key(Path(chapter)):break
+        if chapter_sort_key(name)>chapter_sort_key(chapter):break
         saved=state['chapters'].get(name,{}).get('batches',{})
         try:current=narration.batches(mid,name)
         except (FileNotFoundError,ValueError) as exc:

@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 from app import storage, renumbering
 from app.detector import MODEL_ID, REVISION
 from app.runtime import acquire_server_lock, open_system_folder
+from app.chapter_names import chapter_sort_key
+from app.read_cache import memoized_read
 
 router = APIRouter(prefix='/api/detection')
 process = None
@@ -56,10 +58,14 @@ def busy():
 def ready():
     source = storage.ROOT / 'vendor/magiv3'
     installed = all((source / name).is_file() for name in ('model.safetensors', 'utils.py', 'config.json'))
-    validated = storage.read_json(storage.DATA / 'model-validation.json', {}).get('panel_only_validated') is True
-    return {'ready': installed and validated, 'model': MODEL_ID, 'revision': REVISION, 'message': 'Magi v3 ready · normal detection, panel boxes only' if installed and validated else 'Magi v3 must be installed and panel filtering validated. See README installation steps.'}
+    validation = storage.read_json(storage.DATA / 'model-validation.json', {})
+    validated = (validation.get('panel_only_validated') is True
+                 and validation.get('revision', REVISION) == REVISION
+                 and validation.get('model', MODEL_ID) == MODEL_ID)
+    return {'ready': installed and validated, 'model': MODEL_ID, 'revision': REVISION, 'message': 'Magi v3 ready · normal detection, panel boxes only' if installed and validated else 'Install Magi v3, then run python -m scripts.validate_model using this repository’s virtual environment. See README installation steps.'}
 
 
+@memoized_read
 def catalog():
     settings = storage.read_json(base() / 'settings.json', {})
     library = storage.read_json(storage.DATA / 'library.json', [])
@@ -144,7 +150,7 @@ def selection(ids, direction):
     selected = [all_chapters[i] for i in ids]
     if len({m['id'] for m,c in selected}) != 1: raise ValueError('Choose chapters from one manga per detection job.')
     result = []
-    for manga, chapter in sorted(selected, key=lambda pair: storage.natural_key(PurePosixPath(pair[1]['folder']))):
+    for manga, chapter in sorted(selected, key=lambda pair: chapter_sort_key(pair[1]['name'])):
         if chapter['pending']: raise ValueError('Finish interrupted renumbering before detection.')
         folder = renumbering.folder_path(chapter['folder'])
         result.append({'id': chapter['id'], 'manga_id': manga['id'], 'manga_folder': manga['folder'], 'manga': manga['name'], 'folder': chapter['folder'], 'name': folder.name, 'direction': direction, 'status': 'pending', 'pages': [p.name for p in renumbering.images(folder)], 'results': [], 'elapsed_seconds': 0})
