@@ -43,9 +43,14 @@ def validate_map(beat, payload):
     if not isinstance(anchors,list):return errors+['anchors must be an array.'],[]
     expected=beat['panel_ids']
     actual=[a.get('panel_id') if isinstance(a,dict) else None for a in anchors]
+    # Object order is formatting; preserve every explicit panel/phrase pairing.
+    if len(actual)==len(expected) and len(set(expected))==len(expected) and all(actual.count(pid)==1 for pid in expected):
+        by_id={a['panel_id']:a for a in anchors}
+        anchors=[by_id[pid] for pid in expected]
+        actual=list(expected)
     if actual!=expected:
         errors.append('Panel IDs must appear exactly once, in this order: '+', '.join(expected)+'. Received: '+', '.join(str(x) for x in actual)+'.')
-    normalized=[];previous_end=0
+    normalized=[];previous_end=0;previous_pid=None;previous_phrase=None
     for i,anchor in enumerate(anchors):
         if not isinstance(anchor,dict) or set(anchor)!={'panel_id','phrase'}:
             errors.append(f'Anchor {i+1}: provide panel_id and phrase only.');continue
@@ -58,10 +63,19 @@ def validate_map(beat, payload):
         start=starts[0];end=start+len(phrase)
         if (start and beat['narration'][start-1].isalnum() and phrase[0].isalnum()) or (end<len(beat['narration']) and beat['narration'][end].isalnum() and phrase[-1].isalnum()):
             errors.append(f'{pid}: phrase must begin and end on whole words.')
-        if i==0 and start!=0:errors.append(f'{pid}: the first panel must start with the beginning of the narration.')
-        if i and start<previous_end:errors.append(f'{pid}: phrases must follow script order without overlapping.')
+        if i and start<previous_end:
+            # Switches depend on phrase STARTS. A long earlier phrase may safely
+            # end at the next switch without changing either panel's start time.
+            previous=normalized[-1] if normalized else None
+            prefix=beat['narration'][previous['char_start']:start].rstrip() if previous and start>previous['char_start'] else ''
+            if (previous and previous['panel_id']==previous_pid and re.search(r'\w',prefix)
+                    and len(list(re.finditer(re.escape(prefix),beat['narration'])))==1
+                    and not (start and beat['narration'][start-1].isalnum() and phrase[0].isalnum())):
+                previous.update(phrase=prefix,char_end=previous['char_start']+len(prefix))
+            else:
+                errors.append(f'{previous_pid} → {pid}: panel reading order requires {previous_pid} first, but its phrase {previous_phrase!r} follows or overlaps {phrase!r}. Re-map these panels from the images, revise this beat to match reading order, or omit an unnecessary panel. Do not swap IDs onto unrelated events.')
         if not re.search(r'\w',phrase):errors.append(f'{pid}: phrase must contain a spoken word.')
-        previous_end=end
+        previous_end=end;previous_pid=pid;previous_phrase=phrase
         normalized.append({'panel_id':pid,'phrase':phrase,'char_start':start,'char_end':end})
     return errors,normalized
 
@@ -100,7 +114,7 @@ def prompt_text(mid,chapter,number):
     beat,token=context(mid,chapter,number)
     return ('Match the supplied labeled manga panels to this EXISTING narration. This is an alignment task, not a rewrite.\n'
             'Inspect the images before mapping. Do not infer story content from IDs or prior knowledge. Keep every script word unchanged.\n'
-            'For each selected panel, copy a short exact phrase where that panel should FIRST appear. The first phrase must start at the beginning of the script. '
+            'For each selected panel, copy a short exact phrase where that panel should FIRST appear. The first panel is displayed from time zero, even if its identifying phrase follows a short lead-in. '
             'Every phrase must occur exactly once in the script, start/end on whole words, and follow script order without overlap. '
             'Use every selected panel exactly once in the supplied order. A panel may remain through multiple sentences; a sentence may contain several panel switches at distinct phrases. '
             'Choose phrases based on what the images actually show, not evenly spaced words or sentence counts. Do not invent panels or add events. '

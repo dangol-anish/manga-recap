@@ -31,15 +31,55 @@ class AlignmentTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):alignment.save_map('test','Chapter 1',6,'c'*64,json.dumps(self.payload))
 
     def test_invalid_ids_order_script_rewrites_and_overlapping_phrases(self):
-        for change in ('id','order','rewrite','overlap','first','substring'):
+        for change in ('id','rewrite','same_start','substring'):
             bad=copy.deepcopy(self.payload)
             if change=='id':bad['anchors'][1]['panel_id']='p999-1'
             if change=='order':bad['anchors'].reverse()
             if change=='rewrite':bad['narration']='Changed script'
-            if change=='overlap':bad['anchors'][0]['phrase']=self.beat['narration']
+            if change=='same_start':bad['anchors'][1]['phrase']=bad['anchors'][0]['phrase']
             if change=='first':bad['anchors'][0]['phrase']='truck approaches.'
             if change=='substring':bad['anchors'][1]['phrase']='driver is as'
             self.assertTrue(alignment.validate_map(self.beat,bad)[0],change)
+
+    def test_lead_in_and_shuffled_objects_keep_pairings_and_start_at_zero(self):
+        p=copy.deepcopy(self.payload)
+        p['anchors'][0]['phrase']='truck approaches.'
+        p['anchors'].reverse()
+        errors,anchors=alignment.validate_map(self.beat,p)
+        self.assertEqual(errors,[])
+        self.assertEqual([a['panel_id'] for a in anchors],self.beat['panel_ids'])
+        words=[{'char_start':a['char_start'],'start':i+.2} for i,a in enumerate(anchors)]
+        rows=alignment.anchor_times(self.beat,anchors,words,4)
+        self.assertEqual(rows[0]['start'],0)
+        self.assertEqual(rows[1]['start'],1.2)
+
+    def test_real_phrase_order_conflict_is_not_silently_relabelled(self):
+        p=copy.deepcopy(self.payload)
+        p['anchors'][1]['phrase']='He runs.'
+        p['anchors'][2]['phrase']='The driver is asleep.'
+        errors,_=alignment.validate_map(self.beat,p)
+        self.assertTrue(errors)
+        self.assertIn('p006-2 → p006-6',str(errors))
+        self.assertIn('Do not swap IDs',str(errors))
+
+    def test_nested_anchor_prefix_keeps_switch_starts(self):
+        beat={'number':3,'panel_ids':['p0025-1','p0025-2'],
+              'narration':'Left alone, leaving Banaza with only a bottomless bag from the king.'}
+        payload={'beat':3,'anchors':[
+            {'panel_id':'p0025-1','phrase':'leaving Banaza with only a bottomless bag from the king'},
+            {'panel_id':'p0025-2','phrase':'bag from the king'}]}
+        errors,anchors=alignment.validate_map(beat,payload)
+        self.assertEqual(errors,[])
+        self.assertEqual(anchors[0]['phrase'],'leaving Banaza with only a bottomless')
+        self.assertEqual(anchors[0]['char_start'],beat['narration'].index('leaving'))
+        self.assertEqual(anchors[1]['char_start'],beat['narration'].index('bag'))
+        self.assertEqual(payload['anchors'][0]['phrase'],'leaving Banaza with only a bottomless bag from the king')
+
+    def test_overlap_with_nonunique_prefix_stays_rejected(self):
+        beat={'number':3,'panel_ids':['p0025-1','p0025-2'],'narration':'Go now. Go later.'}
+        payload={'beat':3,'anchors':[{'panel_id':'p0025-1','phrase':'Go now. Go later.'},
+                                  {'panel_id':'p0025-2','phrase':'now.'}]}
+        self.assertTrue(alignment.validate_map(beat,payload)[0])
 
     def test_duplicate_phrase_is_not_guessed(self):
         b=copy.deepcopy(self.beat);b['narration']='Go. Go. He runs.'

@@ -250,7 +250,7 @@ def redo_message(validation,payload,expected):
         'REPAIR RULES:',
         '- panel_ids selects only the panels actually displayed in a beat. You may omit unnecessary panels. Do not list every panel you read for context.',
         '- For each non-silent replacement, panel_ids MUST exactly equal the list of anchors panel_id values: same IDs, same count, same order. If only three useful anchors fit, select only those three panels; do not keep extra unanchored panels. Recheck story grounding and the 40-word-per-selected-panel budget after changing selection.',
-        '- Every anchor phrase is copied verbatim from its own narration, occurs exactly once there, and begins/ends on whole words. The first starts at character 0; later phrases advance without overlap. Never invent matching words or add filler to satisfy anchors.',
+        '- Every anchor phrase is copied verbatim from its own narration, occurs exactly once there, and begins/ends on whole words. The first panel starts at time zero automatically; its phrase may follow a short lead-in. Later phrases advance without overlap. Never invent matching words or add filler to satisfy anchors.',
         '- Mentally insert replacements at their ORIGINAL replace_beat positions among the frozen beats, then flatten ALL selected panel_ids. Every ID must occur once and move strictly forward through VALID_PANEL_IDS. Check boundaries between beats, not just the inside of each beat. An earlier skipped ID cannot reappear after a later ID.',
         '- If two affected beats cross in reading order, repair their grouping and supported narration together. Do not just swap ID labels onto the wrong events. Frozen beats and their IDs cannot be changed or reused.',
         '- Preserve narration where compatible with evidence and order. Revise it when needed for correct grouping or fewer selected panels. Keep the story continuous; no unsupported claims or batch closing.',
@@ -357,7 +357,7 @@ def import_reply(manga_id,chapter,batch_id,fingerprint,reply,corrections_only=Fa
         for field in ('chapter_summary','memory'):
             if field not in payload:validation['errors'].append(f'{field} is required by the fresh-chat format. Return the requested memory metadata without rewriting narration.')
         for index,beat in enumerate(beats,1):
-            if beat and isinstance(beat.get('narration'),str) and beat['narration'].strip() and not beat.get('anchors'):
+            if beat and isinstance(beat.get('narration'),str) and beat['narration'].strip() and not beat.get('anchors') and index not in validation['fix_beats']:
                 validation['errors'].append(f'Beat {index}: add exact phrase anchors for every selected panel, keeping its narration unchanged.')
                 validation['fix_beats']=sorted(set(validation['fix_beats'])|{index})
     validation['ok']=not validation['errors'] and not validation['issues']
