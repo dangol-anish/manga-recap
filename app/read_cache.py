@@ -63,7 +63,11 @@ def file_hash(path):
     # timestamp. Keep its hashes request-local via chapter memoization instead
     # of trusting stat signatures across requests on that platform.
     if _snapshot.get() is None or sys.platform == 'win32':
-        return _hash_file(path)
+        stamp = file_stamp(path)
+        value = _hash_file(path)
+        if file_stamp(path) != stamp:
+            raise FileExistsError('A source file changed during validation. Refresh and retry.')
+        return value
     stamp = file_stamp(path)
     value = _cached_hash(path, stamp)
     if file_stamp(path) != stamp:

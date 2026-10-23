@@ -14,14 +14,14 @@ def run():
     manga,chapter_pages=review.review_context(mid,'Chapter 1')
     batch=narration.find_batch(mid,'Chapter 1','batch-001')
     originals={page.name:storage.read_json(review.record_path(manga,'Chapter 1',page)) for page in chapter_pages if page.name in batch['pages']}
-    master=(project/'prompts/narration_master.md').read_text()
+    master=(project/'prompts/narration_master.md').read_text(encoding='utf-8')
     ids=batch['panel_ids']
     report={'batch':'batch-001','manifest_panels':len(ids),'kind':'Controlled structural tests, not AI-generated manga narration.','checks':{}}
     with tempfile.TemporaryDirectory(prefix='.stage3-beats-test-',dir=project) as tmp:
         testroot=Path(tmp)
         with patch.object(storage,'ROOT',testroot),patch.object(storage,'DATA',testroot/'data'),patch.object(storage,'OUTPUTS',testroot/'outputs'):
             storage.write_json(storage.DATA/'library.json',[manga]);storage.write_json(storage.DATA/'model-validation.json',{'allowed_manga_id':mid})
-            (testroot/'prompts').mkdir();(testroot/'prompts/narration_master.md').write_text(master)
+            (testroot/'prompts').mkdir();(testroot/'prompts/narration_master.md').write_text(master, encoding='utf-8')
             folder=testroot/manga['folder']/'Chapter 1';folder.mkdir(parents=True)
             for name,record in originals.items():
                 (folder/name).touch()  # Only filenames/metadata are needed; no image processing.

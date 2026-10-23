@@ -22,7 +22,7 @@ class StoryTests(unittest.TestCase):
         self.api=f'/api/story/{self.mid}/{self.chapter}'
         prompts=self.root/'prompts';prompts.mkdir(exist_ok=True)
         master=Path(__file__).resolve().parents[1]/'prompts/narration_master.md'
-        (prompts/master.name).write_text(master.read_text())
+        (prompts/master.name).write_text(master.read_text(encoding='utf-8'), encoding='utf-8')
         return records
 
     def status(self):return story.status(self.mid,self.chapter)
@@ -221,7 +221,7 @@ class StoryTests(unittest.TestCase):
     def test_master_schema_example_passes_anchor_and_memory_validation(self):
         from app.narration import validate_payload
         from app.memory import normalize
-        master=(Path(__file__).resolve().parents[1]/'prompts/narration_master.md').read_text()
+        master=(Path(__file__).resolve().parents[1]/'prompts/narration_master.md').read_text(encoding='utf-8')
         example=json.loads(next(line for line in master.splitlines() if line.startswith('{"batch_receipt"')))
         expected=['p0000-1','p0000-2','p0000-3']
         validation,beats,_,_=validate_payload(example,expected)

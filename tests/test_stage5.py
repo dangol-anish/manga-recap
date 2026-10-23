@@ -249,7 +249,10 @@ class VideoTests(unittest.TestCase):
         panels=[dict(self.panels[0],id=f'p{i:03}-1') for i in range(116)]
         beat=dict(self.beats[0],duration=116,switches=list(range(1,116)),panels=panels)
         plan=video.motion_plan({'beats':[beat]})
+        graph=self.root/'full-chapter.ffscript'
+        graph.write_text(video.render_filter(plan),encoding='utf-8')
+        self.assertGreater(graph.stat().st_size,32767)
         result=subprocess.run(['ffmpeg','-nostdin','-v','error','-i',self.panels[0]['_crop'],
-            '-filter_complex',video.render_filter(plan),'-map','[visual]','-filter_complex_threads','1','-filter_threads','1','-threads','1','-frames:v','1','-f','null','-'],
-            capture_output=True,text=True,timeout=30)
+            '-/filter_complex',str(graph),'-map','[visual]','-filter_complex_threads','1','-filter_threads','1','-threads','1','-frames:v','1','-f','null','-'],
+            capture_output=True,text=True,timeout=30, encoding='utf-8', errors='replace')
         self.assertEqual(result.returncode,0,result.stderr[:900])

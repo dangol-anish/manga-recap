@@ -1,5 +1,32 @@
 """Platform-specific server startup helpers; no external dependencies."""
 import os
+import sys
+import subprocess
+import warnings
+from contextlib import contextmanager
+
+
+@contextmanager
+def keep_awake():
+    """Prevent idle system sleep during detection; released on this thread/exit."""
+    awake = None
+    execution_state = None
+    if sys.platform == 'darwin':
+        awake = subprocess.Popen(['caffeinate', '-i', '-w', str(os.getpid())])
+    elif sys.platform == 'win32':
+        import ctypes
+        execution_state = ctypes.windll.kernel32.SetThreadExecutionState
+        # ES_CONTINUOUS | ES_SYSTEM_REQUIRED, without keeping the screen on.
+        if not execution_state(0x80000001):
+            warnings.warn('Windows could not prevent idle sleep. Keep the PC awake while detecting panels.', RuntimeWarning)
+    try:
+        yield
+    finally:
+        if execution_state is not None:
+            execution_state(0x80000000)
+        if awake is not None:
+            awake.terminate()
+            awake.wait()
 
 
 def acquire_server_lock(path):

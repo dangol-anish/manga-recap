@@ -269,7 +269,7 @@ def status(mid, chapter):
         if job.get('running') and job.get('progress_path'):
             p = Path(job['progress_path'])
             if p.exists():
-                for line in p.read_text().splitlines():
+                for line in p.read_text(encoding='utf-8').splitlines():
                     if line.startswith('out_time_us='):
                         try:job['progress']=min(.99,int(line.split('=')[1])/1e6/job['duration'])
                         except ValueError:pass
@@ -297,11 +297,15 @@ def render_to(state, work, cancel_event=None):
         cached=ensure_frame(entry['panel'],frame)
         if cached!=frame:shutil.copyfile(cached,frame)
         lines.append(f"file '{frame.name}'")
-    (work/'panels.ffconcat').write_text('\n'.join(lines)+'\n')
-    with open(work/'ffmpeg.log','w') as log:
+    (work/'panels.ffconcat').write_text('\n'.join(lines)+'\n', encoding='utf-8')
+    # Full chapter graphs exceed Windows' 32,767-character process command
+    # limit. Keep the graph in a UTF-8 file rather than an argv element.
+    graph = work/'visual.ffscript'
+    graph.write_text(render_filter(plan), encoding='utf-8')
+    with open(work/'ffmpeg.log','w',encoding='utf-8') as log:
         command = ['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-y',
             '-f','concat','-safe','1','-i',str(work/'panels.ffconcat'),'-i',str(work/'narration.wav'),
-            '-filter_complex',render_filter(plan),'-map','[visual]','-map','1:a:0','-r',str(FPS),'-fps_mode','cfr','-c:v','libx264',
+            '-/filter_complex',str(graph),'-map','[visual]','-map','1:a:0','-r',str(FPS),'-fps_mode','cfr','-c:v','libx264',
             '-preset','veryfast','-tune','stillimage','-crf','21','-threads','2','-filter_threads','1','-filter_complex_threads','1',
             '-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-t',str(state['duration']),
             '-movflags','+faststart','-progress',str(work/'progress.txt'),str(work/'chapter.mp4')]
@@ -323,9 +327,9 @@ def render_to(state, work, cancel_event=None):
                     process.terminate()
                     try:process.wait(timeout=5)
                     except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
-    if returncode:raise ValueError('FFmpeg export failed: '+(work/'ffmpeg.log').read_text()[-600:])
+    if returncode:raise ValueError('FFmpeg export failed: '+(work/'ffmpeg.log').read_text(encoding='utf-8')[-600:])
     probe=subprocess.run(['ffprobe','-v','error','-show_entries','stream=codec_name,codec_type,duration:format=duration',
-                          '-of','json',str(work/'chapter.mp4')],capture_output=True,text=True,check=True,timeout=30)
+                          '-of','json',str(work/'chapter.mp4')],capture_output=True,text=True,check=True,timeout=30, encoding='utf-8', errors='replace')
     info=json.loads(probe.stdout)
     if {s['codec_type'] for s in info['streams']}!={'video','audio'} or abs(float(info['format']['duration'])-state['duration'])>.15 or any(abs(float(s['duration'])-state['duration'])>.15 for s in info['streams']):
         raise ValueError('Rendered video failed audio/video duration validation.')

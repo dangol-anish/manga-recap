@@ -1,3 +1,4 @@
+from tests.support import create_symlink
 import asyncio
 from hashlib import sha256
 from io import BytesIO
@@ -50,7 +51,7 @@ class SourcesTests(unittest.TestCase):
 
 class DownloadTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1] / 'outputs')
+        self.temp=tempfile.TemporaryDirectory(prefix='.test-',dir=Path(__file__).resolve().parents[1])
         self.root=Path(self.temp.name)
         self.patches=[patch.object(storage,'ROOT',self.root),patch.object(storage,'DATA',self.root/'data')]
         for p in self.patches:p.start()
@@ -139,7 +140,7 @@ class DownloadTests(unittest.TestCase):
     def test_path_escape_and_symlink_blocked(self):
         with self.assertRaises(ValueError):d.destination('manga/../../outside')
         (self.root/'manga').mkdir(exist_ok=True)
-        (self.root/'manga/link').symlink_to(self.root/'data',target_is_directory=True)
+        create_symlink(self.root/'manga/link', self.root/'data', target_is_directory=True)
         with self.assertRaises(ValueError):d.destination('manga/link/page')
 
     def test_no_overwrite_untracked_file(self):

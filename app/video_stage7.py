@@ -106,7 +106,7 @@ def status(mid,chapter):
         if job and active and active['id']==job['id'] and active.get('progress_path'):
             path=Path(active['progress_path'])
             if path.is_file():
-                for line in path.read_text().splitlines():
+                for line in path.read_text(encoding='utf-8').splitlines():
                     if line.startswith('out_time_us='):
                         try:job['progress']=min(.99,int(line.split('=')[1])/1e6/current['duration'])
                         except ValueError:pass

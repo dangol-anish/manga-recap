@@ -11,7 +11,7 @@ from PIL import Image
 from fastapi.testclient import TestClient
 from app import storage,review,narration,memory,audio,video,alignment,main
 
-MASTER=(storage.ROOT/'prompts/narration_master.md').read_text()
+MASTER=(storage.ROOT/'prompts/narration_master.md').read_text(encoding='utf-8')
 
 class GenericTests(unittest.TestCase):
     def setUp(self):
@@ -19,7 +19,7 @@ class GenericTests(unittest.TestCase):
         self.patches=[patch.object(storage,k,self.root/v) for k,v in [('DATA','data'),('OUTPUTS','outputs')]]+[patch.object(storage,'ROOT',self.root)]
         self.patches += [patch.object(main,'DATA',self.root/'data'),patch.object(main,'OUTPUTS',self.root/'outputs')]
         for p in self.patches:p.start()
-        (self.root/'prompts').mkdir();(self.root/'prompts/narration_master.md').write_text(MASTER)
+        (self.root/'prompts').mkdir();(self.root/'prompts/narration_master.md').write_text(MASTER, encoding='utf-8')
         self.manga=[]
         for mid in ['a','b']:
             m={'id':mid,'name':mid,'folder':'manga/'+mid,'direction':'ltr' if mid=='b' else 'rtl'};self.manga.append(m)

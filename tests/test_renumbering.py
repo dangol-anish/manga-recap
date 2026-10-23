@@ -1,3 +1,4 @@
+from tests.support import create_symlink
 import os
 from pathlib import Path
 import tempfile
@@ -10,7 +11,7 @@ from app.main import app
 
 class RenumberingTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1] / 'outputs')
+        self.temp = tempfile.TemporaryDirectory(prefix='.test-',dir=Path(__file__).resolve().parents[1])
         self.root = Path(self.temp.name)
         self.patches = [patch.object(storage,'ROOT',self.root), patch.object(storage,'DATA',self.root/'data')]
         for p in self.patches:p.start()
@@ -116,9 +117,9 @@ class RenumberingTests(unittest.TestCase):
     def test_paths_and_symbolic_links_rejected(self):
         for relative in ('../other','manga/../data','/tmp/folder','manga\\..\\data'):
             with self.assertRaises(ValueError):r.folder_path(relative)
-        link=self.root/'manga/link';link.symlink_to(self.chapter,target_is_directory=True)
+        link=self.root/'manga/link';create_symlink(link, self.chapter, target_is_directory=True)
         with self.assertRaises(ValueError):r.folder_path('manga/link')
-        self.seed(['1.jpg']);(self.chapter/'2.jpg').symlink_to(self.chapter/'1.jpg')
+        self.seed(['1.jpg']);create_symlink(self.chapter/'2.jpg', self.chapter/'1.jpg')
         self.assertEqual(len(r.images(self.chapter)),1)
 
     def test_renumbering_blocked_during_download(self):

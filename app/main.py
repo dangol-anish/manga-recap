@@ -58,9 +58,15 @@ async def lifespan(app):
         job = read_json(path)
         if job['status'] == 'running':
             pid = job.get('pid')
+            if sys.platform == 'win32':
+                try:
+                    acquire_server_lock(path.with_name('_worker.lock')).close()
+                except RuntimeError as exc:
+                    lock.close()
+                    raise RuntimeError('An earlier Library worker is still finishing. Wait for it to exit before restarting the app; do not run a second copy.') from exc
             if pid and sys.platform != 'win32':
-                result = subprocess.run(['ps', '-p', str(pid), '-o', 'command='], capture_output=True, text=True)
-                expected = f'{ROOT / ".venv/bin/python"} -m app.worker {path}'
+                result = subprocess.run(['ps', '-p', str(pid), '-o', 'command='], capture_output=True, text=True, encoding='utf-8', errors='replace')
+                expected = f'{sys.executable} -m app.worker {path}'
                 if result.stdout.strip() == expected:
                     import os, signal, time
                     os.kill(pid, signal.SIGTERM)
@@ -172,7 +178,7 @@ def add_manga(body: MangaInput):
             raise HTTPException(400, 'Direction must be rtl or ltr.')
         try:
             folder = local_path(body.folder.strip())
-            manga = {'id': uuid.uuid4().hex, 'name': folder.name, 'folder': str(folder.relative_to(ROOT)), 'direction': body.direction, 'pacing':dict(audio.DEFAULT_PACING)}
+            manga = {'id': uuid.uuid4().hex, 'name': folder.name, 'folder': folder.relative_to(ROOT).as_posix(), 'direction': body.direction, 'pacing':dict(audio.DEFAULT_PACING)}
             if not chapters(manga):
                 raise ValueError('No chapter folders containing PNG/JPG/WebP pages were found.')
         except ValueError as exc:
@@ -248,7 +254,7 @@ def start_chapter(manga_id: str, chapter_name: str):
         gate = job_file.with_name('_start')
         gate.unlink(missing_ok=True)
         try:
-            process = subprocess.Popen([str(ROOT / '.venv/bin/python'), '-m', 'app.worker', str(job_file)], cwd=ROOT)
+            process = subprocess.Popen([sys.executable, '-m', 'app.worker', str(job_file)], cwd=ROOT)
             active_job = job_file
             job['pid'] = process.pid
             write_json(job_file, job)

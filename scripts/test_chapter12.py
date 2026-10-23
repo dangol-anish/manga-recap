@@ -45,7 +45,7 @@ def run():
             reasons = panel_errors(boxes, image.width, image.height)
             draw_preview(image, boxes, preview)
             result = {'page': name, 'panels': len(boxes), 'seconds': elapsed,
-                      'preview': str(preview.relative_to(ROOT)),
+                      'preview': preview.relative_to(ROOT).as_posix(),
                       'status': 'flagged' if reasons else 'valid'}
             if reasons:
                 destination.unlink(missing_ok=True)
@@ -53,7 +53,7 @@ def run():
                 report['flagged'].append(result.copy())
             else:
                 write_json(destination, page_record(page, image, boxes, detector, elapsed, manga['direction']))
-                result['json'] = str(destination.relative_to(ROOT))
+                result['json'] = destination.relative_to(ROOT).as_posix()
             report['pages'].append(result)
             print(f'{CHAPTER}/{name}: {result["status"]}, panels={len(boxes)}, time={elapsed:.3f}s', flush=True)
         except Exception as exc:

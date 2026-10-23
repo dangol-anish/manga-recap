@@ -1,3 +1,4 @@
+from tests.support import create_symlink
 import importlib.util
 import json
 from pathlib import Path
@@ -56,7 +57,7 @@ class StageOneTests(unittest.TestCase):
 
     def test_outside_paths_and_symlinks_rejected(self):
         with self.assertRaises(ValueError):storage.local_path('../other-project')
-        (self.manga_folder/'linked.png').symlink_to(self.chapter/'001.png')
+        create_symlink(self.manga_folder/'linked.png', self.chapter/'001.png')
         self.assertEqual(storage.pages(self.manga_folder),[])
         self.assertEqual(self.client.post('/api/manga',json={'folder':'../other-project'}).status_code,400)
         self.assertEqual(self.client.post('/api/manga',json={'folder':'manga/Example'},headers={'Origin':'https://other.example'}).status_code,403)

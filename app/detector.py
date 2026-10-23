@@ -31,7 +31,7 @@ class Detector:
         self.dtype = torch.float16 if self.device == 'mps' else torch.float32
         source = ROOT / 'vendor' / 'magiv3'
         if not (source / 'model.safetensors').exists():
-            raise RuntimeError('Magi v3 is not installed. Run .venv/bin/python scripts/install_model.py')
+            raise RuntimeError('Magi v3 is not installed. Run python -m scripts.install_model with this repository’s virtual-environment Python. See the setup guide.')
         started = time.perf_counter()
         self.processor = AutoProcessor.from_pretrained(source, trust_remote_code=True, local_files_only=True)
         self.model = AutoModelForCausalLM.from_pretrained(

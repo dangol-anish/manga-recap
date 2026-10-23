@@ -9,7 +9,7 @@ from PIL import Image
 from fastapi.testclient import TestClient
 from app import storage,review,narration,main
 
-MASTER=(storage.ROOT/'prompts/narration_master.md').read_text()
+MASTER=(storage.ROOT/'prompts/narration_master.md').read_text(encoding='utf-8')
 
 
 class NarrationTests(unittest.TestCase):
@@ -17,7 +17,7 @@ class NarrationTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory(dir=storage.ROOT);self.root=Path(self.tmp.name)
         self.patches=[patch.object(storage,'ROOT',self.root),patch.object(storage,'DATA',self.root/'data'),patch.object(storage,'OUTPUTS',self.root/'outputs')]
         for p in self.patches:p.start()
-        (self.root/'prompts').mkdir();(self.root/'prompts/narration_master.md').write_text(MASTER)
+        (self.root/'prompts').mkdir();(self.root/'prompts/narration_master.md').write_text(MASTER, encoding='utf-8')
         self.manga={'id':'test','folder':'manga/Example','name':'Example','direction':'rtl'}
         storage.write_json(storage.DATA/'library.json',[self.manga])
         storage.write_json(storage.DATA/'model-validation.json',{'allowed_manga_id':'test'})

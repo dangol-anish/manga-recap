@@ -31,5 +31,5 @@ def migrate(manga_folder,chapter,entry,kind):
         target=named_folder(parent,old_name)
         target.rmdir()
         old.rename(target)
-        entry.setdefault('previous_folders',[]).append(str(target.relative_to(storage.OUTPUTS)))
+        entry.setdefault('previous_folders',[]).append(target.relative_to(storage.OUTPUTS).as_posix())
     entry.pop('folder',None)

@@ -82,7 +82,7 @@ def story_context(manga_id,chapter,batch_id):
 def prompt_text(manga_id,chapter,batch_id='batch-001',final_recap=False):
     batch=find_batch(manga_id,chapter,batch_id)
     previous=story_context(manga_id,chapter,batch_id)
-    master=(storage.ROOT/'prompts/narration_master.md').read_text()
+    master=(storage.ROOT/'prompts/narration_master.md').read_text(encoding='utf-8')
     cast=previous['cast']
     sections=[master,'MANGA: '+manga_id+' / CHAPTER: '+chapter,'CURRENT_BATCH: '+batch_id,'FINAL_RECAP: '+str(bool(final_recap)).lower(),
               'VALID_PANEL_IDS (exact IDs, in reading order):\n'+json.dumps(batch['panel_ids']),
@@ -98,11 +98,11 @@ def prompt_file(manga_id,chapter,batch_id='batch-001',final_recap=False):
     path.parent.mkdir(parents=True,exist_ok=True)
     fd,name=tempfile.mkstemp(dir=path.parent,prefix='.prompt-',suffix='.tmp')
     try:
-        with os.fdopen(fd,'w') as stream:stream.write(text)
+        with os.fdopen(fd,'w', encoding='utf-8') as stream:stream.write(text)
         os.replace(name,path)
         if batch_id=='batch-001' and not final_recap:
             legacy=root(manga_id,chapter)/'narration_prompt.md'
-            legacy.write_text(text)
+            legacy.write_text(text, encoding='utf-8')
     finally:
         if os.path.exists(name):os.unlink(name)
     return path

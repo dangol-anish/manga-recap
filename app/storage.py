@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'data'
@@ -14,18 +15,28 @@ DIRECTIONS = {'rtl', 'ltr'}
 def read_json(path, default=None):
     if not path.exists():
         return default
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding='utf-8'))
 
 
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(dir=path.parent, prefix='.', suffix='.tmp')
     try:
-        with os.fdopen(fd, 'w') as stream:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
             json.dump(value, stream, indent=2, allow_nan=False)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(name, path)
+        # Windows readers/virus scanners can briefly deny delete-sharing on a
+        # closed-soon JSON handle. Retry only these transient sharing errors;
+        # leave the old committed document intact on a persistent failure.
+        for attempt in range(8):
+            try:
+                os.replace(name, path)
+                break
+            except PermissionError as exc:
+                if getattr(exc, 'winerror', None) not in (5, 32, 33) or attempt == 7:
+                    raise
+                time.sleep(min(.01 * 2**attempt, .1))
     finally:
         if os.path.exists(name):
             os.unlink(name)

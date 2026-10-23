@@ -1,3 +1,4 @@
+from tests.support import create_symlink
 from pathlib import Path
 import shutil
 import subprocess
@@ -41,11 +42,11 @@ class StitchTests(unittest.TestCase):
         self.assertEqual(probe['signature'][:6]+probe['signature'][7:],videos[0]['signature'][:6]+videos[0]['signature'][7:])
         import json
         def packets(file):
-            r=subprocess.run(['ffprobe','-v','error','-show_packets','-show_data_hash','sha256','-show_entries','packet=stream_index,data_hash','-of','json',str(file)],capture_output=True,text=True,check=True)
+            r=subprocess.run(['ffprobe','-v','error','-show_packets','-show_data_hash','sha256','-show_entries','packet=stream_index,data_hash','-of','json',str(file)],capture_output=True,text=True,check=True, encoding='utf-8', errors='replace')
             return json.loads(r.stdout)['packets']
         # Concat may inject H.264 headers; decoded pictures must be identical.
         def frames(file):
-            r=subprocess.run(['ffmpeg','-v','error','-i',str(file),'-map','0:v:0','-f','framemd5','-'],capture_output=True,text=True,check=True)
+            r=subprocess.run(['ffmpeg','-v','error','-i',str(file),'-map','0:v:0','-f','framemd5','-'],capture_output=True,text=True,check=True, encoding='utf-8', errors='replace')
             return [line.split(',')[-1].strip() for line in r.stdout.splitlines() if not line.startswith('#')]
         self.assertEqual(frames(path),[frame for item in videos for frame in frames(self.root/item['relative'])])
         expected=[p['data_hash'] for item in videos for p in packets(self.root/item['relative']) if p['stream_index']==1]
@@ -74,7 +75,7 @@ class StitchTests(unittest.TestCase):
             with self.assertRaises(ValueError):stitch.start('manga',[v['id'] for v in videos])
     def test_path_escape_and_symlink_rejected(self):
         with self.assertRaises(ValueError):stitch.source_path('../escape.mp4')
-        target=self.folder/'Shortcut-Video.mp4';target.symlink_to(self.folder/'Chapter1-Video.mp4')
+        target=self.folder/'Shortcut-Video.mp4';create_symlink(target, self.folder/'Chapter1-Video.mp4')
         with self.assertRaises(ValueError):stitch.source_path(str(target.relative_to(self.root)))
 
     def test_cancel_before_combining_keeps_chapter_files_and_no_partial_result(self):

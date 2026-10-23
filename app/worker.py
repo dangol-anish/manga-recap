@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 import os
 import subprocess
 import sys
@@ -10,18 +9,7 @@ from app.validation import panel_errors, saved_page_errors
 from app.page_processing import page_record
 from app.previews import draw_preview
 from app.authorization import require_authorized
-
-
-@contextmanager
-def keep_awake():
-    # This assertion automatically ends if this worker exits, even after a kill.
-    awake = subprocess.Popen(['caffeinate', '-i', '-w', str(os.getpid())]) if sys.platform == 'darwin' else None
-    try:
-        yield
-    finally:
-        if awake is not None:
-            awake.terminate()
-            awake.wait()
+from app.runtime import keep_awake
 
 
 def run(job_file):
@@ -39,7 +27,7 @@ def run(job_file):
     flagged, results = [], []
     detector = None
     chapter_pages = pages(ROOT / manga['folder'] / chapter)
-    job.update(total_pages=len(chapter_pages), keep_awake=sys.platform == 'darwin', flagged=[], pages=[])
+    job.update(total_pages=len(chapter_pages), keep_awake=sys.platform in ('darwin','win32'), flagged=[], pages=[])
     write_json(job_file, job)
     try:
         with keep_awake():
@@ -109,4 +97,11 @@ def run(job_file):
 
 
 if __name__ == '__main__':
-    raise SystemExit(run(Path(sys.argv[1])))
+    from app.runtime import acquire_server_lock
+    job_file = Path(sys.argv[1])
+    handle = acquire_server_lock(job_file.with_name('_worker.lock'))
+    try:
+        result = run(job_file)
+    finally:
+        handle.close()
+    raise SystemExit(result)

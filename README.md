@@ -2,6 +2,10 @@
 
 A local FastAPI app that turns chapter images into narrated recap videos. Use any registered manga and chapter; no Codex session is needed to operate the app. Python, plain HTML/JavaScript, JSON on disk, free local tools. An external image-capable AI writes narration through manual export/import. Edge TTS sends narration to Microsoft's online service and needs internet; detection, editing and rendering run locally.
 
+## Windows setup
+
+Follow [the complete Windows installation and run guide](docs/WINDOWS_SETUP.md). It includes prerequisites, `setup-windows.bat`, validation, all eight stages, existing-work transfer and troubleshooting. See [the Windows compatibility audit](docs/WINDOWS_AUDIT.md) for changes and verification limits.
+
 ## Run
 
 From this repository:
@@ -10,7 +14,7 @@ From this repository:
 ./run.sh
 ```
 
-On Windows, run `run.bat` from Command Prompt or `.\run.bat` from PowerShell after creating `.venv` and installing `requirements.txt`. The Windows virtual environment uses `.venv\Scripts\python.exe`; macOS uses `.venv/bin/python`.
+On Windows, first follow the guide and run `.\setup-windows.bat`, then use `run.bat` from Command Prompt or `.\run.bat` from PowerShell. The Windows virtual environment uses `.venv\Scripts\python.exe`; macOS uses `.venv/bin/python`.
 
 Open <http://127.0.0.1:8000/>. Dependencies live in this repo's `.venv`; FFmpeg and ffprobe must be available. To install from scratch, create `.venv` and install `requirements.txt`. Then install and explicitly validate the pinned official `ragavsachdeva/magiv3` model, revision `49c73a225122d53adbaa26d53868be81a57706e2`:
 
@@ -56,7 +60,7 @@ A cleaned/renumbered download folder is protected against Downloader resume so i
 
 ## Stage 3 Panel Detection
 
-Open **Stage 3: Panel Detection**. Choose a manga, reading direction, and chapter folders; press **Start detection**. This is an explicit action: opening the page never processes chapters. A separate Python process loads the existing pinned Magi v3 model once, processes one page at a time, and keeps the Mac awake. The app permits one heavy task at a time, including detection, download, speech and rendering. Stage 3 uses the current Python interpreter on macOS/Windows, without a hardcoded venv executable path.
+Open **Stage 3: Panel Detection**. Choose a manga, reading direction, and chapter folders; press **Start detection**. This is an explicit action: opening the page never processes chapters. A separate Python process loads the existing pinned Magi v3 model once, processes one page at a time, and prevents idle system sleep on macOS and Windows during detection. The app permits one heavy task at a time, including detection, download, speech and rendering. Stage 3 uses the current Python interpreter on macOS/Windows, without a hardcoded venv executable path.
 
 Normal model detection runs; non-panel outputs are discarded immediately. No OCR or character association runs. Each valid page gets ordered panel JSON and a red-box numbered preview under `outputs/<manga-id>/<chapter>/detection/`. `report.json` holds per-chapter totals, page times and flagged reasons. Invalid boxes never enter the valid `pages/` directory. Unreadable source images are flagged without a preview. The page shows overall and per-chapter progress, elapsed time, valid/flagged counts, panel counts, average seconds per page, expandable previews (flagged first), and native output-folder buttons.
 
@@ -78,15 +82,16 @@ Use **Open folder** in the review heading to inspect the chapter output in Finde
 
 ## Daily workflow
 
-1. Put manga inside this repo: `manga/MyManga/<chapter folders>/<page images>`. Natural filename sorting supports numbered images and names such as `page_001.jpg`. Keep a chapter's files stable after importing its narration. Add the manga in Library and select right-to-left or left-to-right reading direction.
-2. Click **Process chapter**. Detection runs in a background worker, one page at a time. It skips valid existing JSONs and keeps the Mac awake. Stop/resume preserves completed results. Only panel detections are retained; text/character detections are discarded. No OCR or character associations run.
-3. Click **Prepare panels**, then **Review panels**. Preparation preserves existing manual fixes. Review significant geometry/order mistakes. Crop padding, labeled copies and review flags follow the project rules. Failed detector pages may become flagged whole-page panels for review; invalid detections never become valid Stage 1 JSONs.
-4. Click **Export & import narration**. For each batch (at most 20 pages), download the ZIP and its current prompt. Extract the ZIP. **Start a fresh AI chat**, attach those labeled images and send the entire prompt together. Do not rely on any previous chat.
-5. Paste the AI JSON into the selected batch and click **Validate & import**. The receipt identifies the manga, chapter, batch, page revisions and prior context. IDs may repeat in another chapter, but a receipt cannot be reused there. Errors offer targeted corrections without changing a valid saved import. New replies include selected story beats, exact phrase anchors, cast, continuity, a chapter summary and durable memory updates. Imports made with the older format remain readable.
-6. Open **Audio** and generate speech. New manga default to Brian Multilingual at 1.0× with brief 180 ms period pauses; existing saved pacing stays intact. New imports with phrase anchors capture actual Edge TTS word timestamps and obtain phrase-aligned cuts automatically. Empty narration stays silent. Listen and regenerate individual beats if needed. Existing clips survive failed regeneration.
-7. Open **Video**. Preview and adjust switch times, save and render an MP4. Existing imported narration without anchors can use equal/manual timing or the phrase-map editor. Applying saved maps explicitly generates timestamped speech and rebuilds that chapter. The sharp unstretched panel, blurred background, shadow, smooth zooms/slides and short crossfades are shared across chapters.
+1. **Downloader:** download selected chapters from MangaPill/WeebCentral, or place chapter-image folders inside `manga/`.
+2. **Renumbering:** manually remove unwanted images, then renumber selected chapter folders from `0000`.
+3. **Panel Detection:** choose chapters across manga, set each manga's reading direction and start; Stop/Resume keeps verified pages.
+4. **Panel Review:** prepare crops and labeled photos from completed detections; use **Export & narrate** for a prepared chapter. The contact sheet remains hidden as requested.
+5. **Narration:** export up to 20 photos into a plain folder, attach them to a fresh AI chat, copy the matching batch prompt and import its JSON reply. Continue in order so preceding saved context is included; there are no ZIPs or prompt downloads in this workflow.
+6. **Audio:** generate current imported narration, listen to the full track and regenerate individual beats as needed. Several chapters can be queued. Brian at 1.0× with 180 ms period pauses is the new-chapter default; saved chapter profiles remain intact. Edge TTS requires internet.
+7. **Video:** click **Create video**, follow progress and watch the finished MP4 in its native player; save timing edits and rebuild if needed. No TTS or detection runs in this stage.
+8. **Stitch:** combine compatible finished chapter videos from one manga without re-encoding.
 
-No chapters are processed automatically. One heavy detection, speech, alignment or video job runs at a time across Library. Folder discovery does not authorize a background run.
+Opening a stage never starts real processing. One heavy task runs at a time. Use the Audio/Video folder buttons for readable saved copies. The older `/library` routes and historical scripts remain for saved-work compatibility; they are not the current sidebar workflow.
 
 ## Story context without an endless chat
 
@@ -108,12 +113,13 @@ Edits to earlier narration, panels or memory invalidate dependent later imports.
 
 ## Local storage and compatibility
 
-- `data/library.json`: registered manga and reading directions.
-- `data/manga/<id>/narration.json`: canonical imports, chapter summaries, sourced memory and retained earlier revisions; atomically saved with cast/continuity.
-- `outputs/<id>/<chapter>/`: detector JSONs/previews, Stage 2 crops/labeled pages, Stage 3 exports/audio and Stage 5 timings/video/alignment.
-- Existing Chapter 1 assets remain at their original paths and keep their original hashes. Python helper defaults and its old MP4 basename remain for compatibility; web requests always pass the selected manga/chapter explicitly.
+- `manga/`: downloaded chapter images.
+- `data/manga/<id>/story-stage5.json`: rebuilt workflow's narration, cast and provenance-backed story context.
+- `outputs/<id>/<chapter>/detection/`, `panels/`, `narration/`: current detections, crops, labeled pages, audio and video revisions.
+- `outputs/Audio/<manga name>/` and `outputs/Videos/<manga name>/`: readable media copies.
+- Historical narration/media stay at their original locations and remain separate.
 
-Manga, local state, generated media, model weights, caches, `.env` and virtual environments are ignored by Git. Small source files and JSON verification reports can be committed. Nothing reads or imports another project on this computer.
+Manga, local state, generated media, model weights, caches, `.env` and virtual environments are ignored by Git. Keep the whole workspace together when moving saved work; recreate the virtual environment for each OS. Use local APFS/NTFS and a short clone path on Windows. The Windows guide explains known platform limits and the local installation checker.
 
 ## Validation
 

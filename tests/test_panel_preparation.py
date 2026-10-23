@@ -14,7 +14,7 @@ from app.main import app
 
 class PreparationTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1]/'outputs');self.root=Path(self.temp.name)
+        self.temp=tempfile.TemporaryDirectory(prefix='.test-',dir=Path(__file__).resolve().parents[1]);self.root=Path(self.temp.name)
         self.patches=[patch.object(storage,'ROOT',self.root),patch.object(storage,'DATA',self.root/'data'),patch.object(storage,'OUTPUTS',self.root/'outputs'),patch.object(worker,'keep_awake',return_value=nullcontext())]
         for value in self.patches:value.start()
         self.source=self.root/'manga/Sample/Chapter 1';self.source.mkdir(parents=True)

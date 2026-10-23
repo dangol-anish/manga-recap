@@ -1,3 +1,4 @@
+from tests.support import create_symlink
 from pathlib import Path
 import tempfile
 import unittest
@@ -57,7 +58,7 @@ class VideoFolderTests(unittest.TestCase):
         storage.write_json(directory/'export.json',{'render_token':'b'*64,'bytes':5})
         root=folders.sync();self.assertEqual(len(list(root.iterdir())),2)
     def test_symlink_root_rejected(self):
-        self.out.mkdir();target=self.root/'other';target.mkdir();(self.out/'Videos').symlink_to(target,target_is_directory=True)
+        self.out.mkdir();target=self.root/'other';target.mkdir();create_symlink(self.out/'Videos', target, target_is_directory=True)
         with patch('app.runtime.open_system_folder') as opener:
             self.assertEqual(TestClient(app).post('/api/cinema/open-root-folder').status_code,400)
             opener.assert_not_called()

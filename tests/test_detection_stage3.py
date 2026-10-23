@@ -25,14 +25,14 @@ class FakeDetector:
 
 class DetectionTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1]/'outputs')
+        self.temp=tempfile.TemporaryDirectory(prefix='.test-',dir=Path(__file__).resolve().parents[1])
         self.root=Path(self.temp.name)
         self.patches=[patch.object(storage,'ROOT',self.root),patch.object(storage,'DATA',self.root/'data'),patch.object(storage,'OUTPUTS',self.root/'outputs'),patch.object(w,'keep_awake',return_value=nullcontext())]
         for p in self.patches:p.start()
         self.folder=self.root/'manga'/'Sample'/'Chapter 1';self.folder.mkdir(parents=True)
         for name in ('0000.png','0001.png'):Image.new('RGB',(100,100),'white').save(self.folder/name)
         source=self.root/'vendor/magiv3';source.mkdir(parents=True)
-        for name in ('model.safetensors','config.json','utils.py'):(source/name).write_text('fixture only, never loaded')
+        for name in ('model.safetensors','config.json','utils.py'):(source/name).write_text('fixture only, never loaded', encoding='utf-8')
         storage.write_json(storage.DATA/'model-validation.json',{'panel_only_validated':True})
         FakeDetector.calls=[];d.process=d.active_id=None;downloader.active=None
 
@@ -222,7 +222,7 @@ from app import detection_worker as worker
 worker.keep_awake=lambda:nullcontext()
 raise SystemExit(worker.main(Path(sys.argv[2])))
 """
-        result=subprocess.run([sys.executable,'-c',program,str(self.root),str(d.job_path(job['id']))],cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True,timeout=15)
+        result=subprocess.run([sys.executable,'-c',program,str(self.root),str(d.job_path(job['id']))],cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True,timeout=15, encoding='utf-8', errors='replace')
         self.assertEqual(result.returncode,0,result.stderr)
         saved=d.load(job['id']);self.assertEqual(saved['status'],'complete')
         self.assertTrue(all(r['cached'] for r in saved['chapters'][0]['results']))

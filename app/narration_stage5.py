@@ -198,7 +198,7 @@ def export_api(mid:str,chapter:str,bid:str,body:ExportRequest):
         with task_lock,lock,panels.lock:
             ensure_idle();path=export_photos(mid,chapter,bid,body.fingerprint)
         open_system_folder(path)
-        return {'folder':str(path.relative_to(storage.ROOT)),'photos':len(list(path.glob('*.png')))}
+        return {'folder':path.relative_to(storage.ROOT).as_posix(),'photos':len(list(path.glob('*.png')))}
     except (ValueError,OSError) as exc:raise error(exc)
 
 

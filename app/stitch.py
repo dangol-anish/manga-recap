@@ -62,7 +62,7 @@ def source_path(relative):
 
 @lru_cache(maxsize=128)
 def probe(path,digest):
-    result=subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(path)],capture_output=True,text=True,timeout=30)
+    result=subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(path)],capture_output=True,text=True,timeout=30, encoding='utf-8', errors='replace')
     if result.returncode:raise ValueError('This video could not be read: '+Path(path).name)
     data=json.loads(result.stdout);streams=data.get('streams',[])
     v=next((s for s in streams if s['codec_type']=='video'),None);a=next((s for s in streams if s['codec_type']=='audio'),None)
@@ -78,12 +78,12 @@ def catalog():
         folder=video_folders.folder(root,entry['folder']);videos=[]
         for path in sorted(folder.glob('*-Video*.mp4'),key=lambda p:chapter_sort_key(p.name)):
             if path.is_symlink():continue
-            relative=str(path.relative_to(storage.ROOT));source_path(relative);digest=checksum(path)
+            relative=path.relative_to(storage.ROOT).as_posix();source_path(relative);digest=checksum(path)
             try:metadata=probe(str(path),digest)
             except (ValueError,OSError,subprocess.SubprocessError):continue
             ident=hashlib.sha256((mid+'/'+path.name+'/'+digest).encode()).hexdigest()[:32]
             videos.append({'id':ident,'filename':path.name,'relative':relative,'sha256':digest,**metadata})
-        if videos:groups.append({'id':mid,'name':folder.name,'folder':str(folder.relative_to(storage.ROOT)),'videos':videos})
+        if videos:groups.append({'id':mid,'name':folder.name,'folder':folder.relative_to(storage.ROOT).as_posix(),'videos':videos})
     return groups
 
 
@@ -130,7 +130,7 @@ def run(job):
                 try:os.link(source,target)
                 except OSError:shutil.copyfile(source,target)
                 lines.append("file '"+target.name+"'")
-            (work/'chapters.txt').write_text('\n'.join(lines)+'\n')
+            (work/'chapters.txt').write_text('\n'.join(lines)+'\n', encoding='utf-8')
             output=work/'combined.mp4';progress=work/'progress.txt';total=sum(i['duration'] for i in job['items'])
             with (work/'error.log').open('w') as log:
                 command=['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-f','concat','-safe','1','-i',str(work/'chapters.txt'),'-map','0:v:0','-map','0:a:0','-c','copy','-movflags','+faststart','-avoid_negative_ts','make_zero','-progress',str(progress),'-nostats','-y',str(output)]
@@ -143,19 +143,19 @@ def run(job):
                         except subprocess.TimeoutExpired:process.kill();process.wait()
                         raise InterruptedError()
                     if progress.is_file():
-                        for line in progress.read_text().splitlines():
+                        for line in progress.read_text(encoding='utf-8').splitlines():
                             if line.startswith('out_time_us='):
                                 try:job['progress']=min(.98,int(line.split('=')[1])/1e6/total)
                                 except ValueError:pass
                         with lock:save(job)
-                if process.returncode:raise ValueError('Could not combine the videos: '+(work/'error.log').read_text()[-400:])
+                if process.returncode:raise ValueError('Could not combine the videos: '+(work/'error.log').read_text(encoding='utf-8')[-400:])
             if cancel.is_set():raise InterruptedError()
             metadata=probe(str(output),checksum(output))
             if abs(metadata['duration']-total)>max(.5,len(job['items'])*.2):raise ValueError('The combined video length did not match the selected chapters.')
             validate(job['items'])
             if cancel.is_set():raise InterruptedError()
             target=publish(output,folder,'Combined video',checksum(output),{},extension='.mp4')
-            job.update(status='complete',progress=1,message='Your combined video is ready.',output=str(target.relative_to(storage.ROOT)),output_sha256=checksum(target),duration=metadata['duration'])
+            job.update(status='complete',progress=1,message='Your combined video is ready.',output=target.relative_to(storage.ROOT).as_posix(),output_sha256=checksum(target),duration=metadata['duration'])
     except InterruptedError:job.update(status='paused',message='Stopped. Your chapter videos are unchanged. Try again when ready.')
     except Exception as exc:job.update(status='failed',message=str(exc))
     finally:

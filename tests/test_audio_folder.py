@@ -1,3 +1,4 @@
+from tests.support import create_symlink
 from pathlib import Path
 import tempfile
 import unittest
@@ -49,6 +50,6 @@ class AudioRootFolderTests(unittest.TestCase):
         self.assertEqual(folders.safe_name('A: Manga?'),'A- Manga-')
         self.assertEqual(folders.safe_name('CON'),'_CON')
         with tempfile.TemporaryDirectory() as temp:
-            root=Path(temp);out=root/'outputs';out.mkdir();other=root/'other';other.mkdir();(out/'Audio').symlink_to(other,target_is_directory=True)
+            root=Path(temp);out=root/'outputs';out.mkdir();other=root/'other';other.mkdir();create_symlink(out/'Audio', other, target_is_directory=True)
             with patch.object(storage,'ROOT',root),patch.object(storage,'OUTPUTS',out):
                 with self.assertRaises(ValueError):folders.sync()
