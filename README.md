@@ -22,6 +22,16 @@ Open <http://127.0.0.1:8000/>. Dependencies live in this repo's `.venv`; FFmpeg 
 
 On Windows, use `.venv\Scripts\python.exe -m scripts.install_model` followed by `.venv\Scripts\python.exe -m scripts.validate_model`. Validation runs normal detection on a synthetic image, checks panel filtering and geometry, and records the validated model revision in ignored `data/model-validation.json`. It never reads or processes manga chapters. A failed check does not overwrite an existing record. Stage 3 stays disabled until validation succeeds; opening the app never runs this check automatically. Model files remain in ignored `vendor/magiv3`.
 
+## Create audio or videos for several chapters
+
+On **Audio** or **Video**, use **Create audio/videos for several chapters**. Choose a manga, check the ready chapters, then press **Create selected audio/videos**. The app works through them in chapter order, one at a time, and shows progress for each chapter. Finished current work is reused; audio generation also joins the chapter's clips into its full track. Each chapter keeps its own files.
+
+You can close the browser tab while the local app stays running. **Stop selected chapters** saves completed work, and **Resume unfinished chapters** retries only unfinished chapters. After restarting the app, resumption is always explicit. If narration, panels or timing changed, start a new selection for that chapter. Queue state is stored under ignored `data/batch-work/`.
+
+## Find saved audio and videos
+
+Use **Open saved audio folder** on Audio or **Open saved videos folder** on Video. These buttons are always visible and open Finder on macOS or Explorer on Windows. Files are organized in `outputs/Audio/<manga name>/<chapter>/` and `outputs/Videos/<manga name>/<chapter>/`. Opening the folder prepares readable copies of saved media; it never generates new speech or video. Existing files and older versions are retained.
+
 ## Portable local storage
 
 Downloads always live inside **your clone**, at `manga/<manga>/<chapter>/001.jpg` (or PNG/WebP), regardless of where you cloned it or your operating system. The app resolves this location from its own source files, not the terminal working directory. Saved job paths are relative, so moving the whole repository with its local data keeps downloads resumable. `manga/`, `data/`, `outputs/` and `.venv` are ignored by Git: pushing source code does not upload local manga, job state or media. A fresh clone starts without those local files and creates download folders when needed.

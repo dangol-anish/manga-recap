@@ -171,7 +171,11 @@ class SpeechTests(unittest.TestCase):
         self.assertEqual(self.said,[])
         self.generate()
         with patch.object(speech,'open_system_folder') as opened:
-            self.assertEqual(self.client.post(self.speech_api+'/open-folder',json={}).status_code,200);opened.assert_called_once_with(speech.root(self.mid,self.chapter))
+            self.assertEqual(self.client.post(self.speech_api+'/open-folder',json={}).status_code,200)
+            directory=storage.OUTPUTS/'Audio'/'Sample'/self.chapter
+            opened.assert_called_once_with(directory)
+            self.assertTrue((directory/'Full chapter.mp3').is_file())
+            self.assertEqual(len(list((directory/'Voice clips').glob('*.mp3'))),2)
 
     def test_multiple_phrase_switches_use_word_timestamps(self):
         payload=self.payload();ids=self.status()['batches'][0]['panel_ids'][:2]

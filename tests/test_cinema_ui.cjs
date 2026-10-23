@@ -22,6 +22,7 @@ class Element{
  return {ok:true,json:async()=>clone(value)};
  }});
  vm.runInContext(fs.readFileSync('app/static/cinema.js','utf8'),context);await new Promise(r=>setImmediate(r));
+ await get('#open-video-root').events.click();assert(calls.some(c=>c.url==='/api/cinema/open-root-folder'&&c.options?.method==='POST'));assert.equal(get('#open-video-root').disabled,false);calls.length=0;
  assert.equal(get('#chapter-select').disabled,true);get('#manga-select').value='sample';await get('#manga-select').events.change();assert.equal(get('#chapter-select').disabled,false,'Choosing a manga must enable its chapter dropdown');get('#chapter-select').value='Chapter 1';await get('#chapter-select').events.change();
 
  const player=get('#preview');assert.equal(calls.filter(c=>c.options?.method).length,0,'Opening Video must not export or synthesize');assert.equal(player.hidden,true);assert.equal(get('#build-preview').disabled,false);assert.equal(get('#progress').value,0,'A deleted video must not show completed render progress');assert(!get('#job').textContent.includes('MP4 ready'));

@@ -1,3 +1,15 @@
+# Saved media folder buttons
+
+- Audio and Video must each have an always-visible header folder button, without requiring manga/chapter selection. Open clean native Audio/Videos folders organized by readable manga name, then chapter, then playable files. Maintain safe copies; do not expose internal IDs/logs, move original assets, overwrite user changes or regenerate media when opening folders. Keep copies under ignored outputs and mapping indexes under ignored data.
+
+# Multiple-chapter audio and video
+
+- Audio and Video offer explicit chapter selection with Create selected, per-chapter progress, safe stop/resume and persistent queues. Process sequentially to stay lightweight; preserve separate chapter outputs and reuse current completed media. Do not start real generation during implementation or on app startup.
+
+# User-facing wording
+
+- Write for nontechnical users. Use plain action labels such as Create video and Save video to computer; explain where files go and avoid render/export jargon in the interface.
+
 # Current audio default
 
 - New narration audio defaults to Brian Multilingual at 1.1× (+10%) with 180 ms period pauses. Preserve existing chapters' recorded voice, pacing, audio, phrase timestamps and videos when changing defaults; do not regenerate media automatically.

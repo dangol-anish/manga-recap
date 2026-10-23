@@ -304,6 +304,16 @@ class Request(BaseModel):
 def error(exc):return HTTPException(409 if isinstance(exc,FileExistsError) else 400,str(exc))
 
 
+@router.post('/open-root-folder')
+def root_folder_api():
+    try:
+        from app.audio_folders import sync
+        directory=sync()
+        open_system_folder(directory)
+        return {'opened':True}
+    except (ValueError,OSError) as exc:raise error(exc)
+
+
 @router.get('/catalog')
 def catalog_api():
     groups=story.catalog_api()
@@ -362,8 +372,8 @@ def audio_api(mid:str,chapter:str,number:int,token:str,file:str):
 @router.post('/{mid}/{chapter}/open-folder')
 def folder_api(mid:str,chapter:str):
     try:
-        path=root(mid,chapter)
-        if not path.is_dir():raise ValueError('Generate audio first.')
+        from app.audio_folders import sync
+        path=sync(mid,chapter)
         open_system_folder(path);return {'opened':True}
     except (ValueError,OSError) as exc:raise error(exc)
 

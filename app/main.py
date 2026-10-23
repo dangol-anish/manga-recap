@@ -88,8 +88,11 @@ async def lifespan(app):
         speech_stage6.recover()
         from app import video_stage7
         video_stage7.recover()
+        from app import batch_work
+        batch_work.recover()
         yield
     finally:
+        batch_work.shutdown()
         video_stage7.shutdown()
         speech_stage6.shutdown()
         panel_preparation.shutdown()
@@ -663,3 +666,7 @@ def video_stage7_page():
 
 from app.video_stage7 import router as cinema_router
 app.include_router(cinema_router)
+
+
+from app.batch_work import router as batch_work_router
+app.include_router(batch_work_router)

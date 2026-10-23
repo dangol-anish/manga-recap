@@ -4,6 +4,9 @@ lock=threading.RLock()
 
 
 def ensure_idle():
+    from app import batch_work
+    if batch_work.active is not None and threading.current_thread() is not batch_work.worker:
+        raise FileExistsError('Selected chapters are being created. Wait for them to finish or stop the selection first.')
     from app import video_stage7
     if video_stage7.active is not None:
         raise FileExistsError("Stage 7 video export is running. Wait for it to finish before starting another task.")

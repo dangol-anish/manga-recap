@@ -29,3 +29,5 @@ $('#full-audio').addEventListener('play',()=>{playing=false;queue=[];for(const r
 $('#open-folder').addEventListener('click',async()=>{try{await api(base()+'/open-folder',{});}catch(error){notice(error.message);}});
 async function poll(){if(!busy&&chapter())await loadStatus();setTimeout(poll,state?.busy?2000:5000);}
 catalog();setTimeout(poll,2000);
+
+$('#open-audio-root').addEventListener('click',async()=>{const button=$('#open-audio-root');button.disabled=true;try{await api('/api/speech/open-root-folder',{});}catch(error){notice(error.message);}finally{button.disabled=false;}});

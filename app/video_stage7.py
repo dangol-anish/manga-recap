@@ -89,7 +89,7 @@ def jobs():
 def recover():
     for job in jobs():
         if job['status']=='running':
-            job.update(status='interrupted',message='Render interrupted. Existing exports are preserved; export again when ready.')
+            job.update(status='interrupted',message='Video creation stopped. Your saved videos are safe. Click Create video to try again.')
             storage.write_json(job_path(job['id']),job)
 
 
@@ -144,10 +144,10 @@ def run(mid,chapter,snapshot,job):
             work=Path(name)
             with lock:
                 active['progress_path']=str(work/'progress.txt')
-                job.update(message='Rendering MP4 from saved crops and audio…');storage.write_json(job_path(job['id']),job)
+                job.update(message='Creating your video from the saved panels and audio…');storage.write_json(job_path(job['id']),job)
             video.render_to(snapshot,work,cancel_event=cancel)
             if cancel.is_set():raise InterruptedError('Render interrupted.')
-            if timeline(mid,chapter)['render_token']!=snapshot['render_token']:raise FileExistsError('Sources changed during render. Export the current version.')
+            if timeline(mid,chapter)['render_token']!=snapshot['render_token']:raise FileExistsError('The audio or panels changed while creating the video. Click Create video again.')
             target=export_path(mid,chapter,snapshot['render_token'])
             if target.is_symlink():raise ValueError('Unsafe export file.')
             # Keep an existing valid same-version export safe if publishing fails.
@@ -166,9 +166,9 @@ def run(mid,chapter,snapshot,job):
                     raise
                 finally:
                     if backup:backup.unlink(missing_ok=True)
-        job.update(status='complete',progress=1,message='MP4 ready.')
-    except InterruptedError:job.update(status='interrupted',message='Render interrupted. Previous exports are preserved.')
-    except Exception as exc:job.update(status='failed',message=f'Export failed: {exc}. Existing exports are preserved.')
+        job.update(status='complete',progress=1,message='Your video is ready to watch and save.')
+    except InterruptedError:job.update(status='interrupted',message='Video creation stopped. Your saved videos are safe.')
+    except Exception as exc:job.update(status='failed',message=f'Could not create the video: {exc}. Your saved videos are safe.')
     finally:
         with lock:
             job.update(elapsed_seconds=time.time()-job['created_at']);job.pop('progress_path',None)
@@ -181,15 +181,15 @@ def start(mid,chapter,token):
     from app.tasks import lock as task_lock,ensure_idle
     with task_lock,lock:
         ensure_idle()
-        if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):raise ValueError('Install free FFmpeg and ffprobe before exporting.')
+        if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):raise ValueError('Video creation needs the free FFmpeg tools. Install FFmpeg and ffprobe, then try again.')
         current=timeline(mid,chapter)
-        if current['render_token']!=token:raise FileExistsError('Timing or sources changed. Refresh and export the current version.')
+        if current['render_token']!=token:raise FileExistsError('The audio, panels or timing changed. Refresh the page and click Create video again.')
         job={'id':uuid.uuid4().hex,'manga_id':mid,'chapter':chapter,'render_token':token,'status':'running','created_at':time.time(),'elapsed_seconds':0,'progress':0,'message':'Preparing video…'}
         storage.write_json(job_path(job['id']),job);cancel.clear();active=dict(job)
         worker=threading.Thread(target=run,args=(mid,chapter,current,job),daemon=True)
         try:worker.start()
         except Exception:
-            active=None;job.update(status='failed',message='Could not start renderer. Retry.');storage.write_json(job_path(job['id']),job);raise
+            active=None;job.update(status='failed',message='Could not start creating the video. Please try again.');storage.write_json(job_path(job['id']),job);raise
         return job
 
 
@@ -208,6 +208,17 @@ class Export(BaseModel):
     render_token:str=Field(min_length=64,max_length=64)
 
 def error(exc):return HTTPException(409 if isinstance(exc,FileExistsError) else 400,str(exc))
+
+
+@router.post('/open-root-folder')
+def root_folder_api():
+    try:
+        from app.video_folders import sync
+        from app.runtime import open_system_folder
+        directory=sync()
+        open_system_folder(directory)
+        return {'opened':True}
+    except (ValueError,OSError) as exc:raise error(exc)
 
 
 @router.get('/catalog')
@@ -258,7 +269,7 @@ def frame_api(mid:str,chapter:str,panel_id:str,key:str):
 def mp4_api(mid:str,chapter:str,token:str,download:bool=False):
     try:
         current=status(mid,chapter)
-        if current['render_token']!=token or not current['ready']:raise FileExistsError('This export is unavailable or outdated. Export the current version.')
+        if current['render_token']!=token or not current['ready']:raise FileExistsError('This video is unavailable or needs updating. Click Create video again.')
         return FileResponse(export_path(mid,chapter,token),media_type='video/mp4',filename=chapter+'.mp4' if download else None,headers={'Cache-Control':'no-store'})
     except (ValueError,OSError) as exc:raise error(exc)
 

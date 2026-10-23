@@ -19,6 +19,7 @@ class Element{
  return {ok:true,json:async()=>value};
  }});
  vm.runInContext(fs.readFileSync('app/static/speech.js','utf8'),context);await new Promise(r=>setImmediate(r));
+ await get('#open-audio-root').events.click();assert(calls.some(c=>c.url==='/api/speech/open-root-folder'));assert.equal(get('#open-audio-root').disabled,false);calls.length=0;
  assert.equal(get('#chapter-select').disabled,true);get('#manga-select').value='sample';await get('#manga-select').events.change();assert.equal(get('#chapter-select').disabled,false,'Choosing a manga must enable its chapter dropdown');get('#chapter-select').value='Chapter 1';await get('#chapter-select').events.change();
 
  assert.equal(calls.filter(c=>c.options?.method).length,0,'Opening Audio must not call TTS');assert.equal(get('#beats').children.length,2);assert.equal(get('#generate').disabled,false);
