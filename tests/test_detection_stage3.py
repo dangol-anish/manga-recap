@@ -143,7 +143,7 @@ class DetectionTests(unittest.TestCase):
         self.assertEqual(d.summary(job)['completed_chapters'],2)
         self.assertNotEqual(d.output(job['chapters'][0]),d.output(job['chapters'][1]))
 
-    def test_other_manga_cannot_be_mixed_and_pending_rename_blocked(self):
+    def test_multi_manga_requires_separate_directions_and_pending_rename_blocked(self):
         other=self.root/'manga/Other/Chapter 1';other.mkdir(parents=True);Image.new('RGB',(100,100)).save(other/'0000.png')
         groups=d.catalog()['manga'];ids=[m['chapters'][0]['id'] for m in groups]
         with self.assertRaises(ValueError):d.selection(ids,'rtl')
@@ -283,6 +283,71 @@ raise SystemExit(worker.main(Path(sys.argv[2])))
         self.assertEqual(FakeDetector.calls,['rtl'])
         self.assertEqual(d.summary(job)['valid_pages'],2)
         self.assertEqual((folder/'pages/0000.png.json').read_bytes(),original)
+
+
+
+
+    def test_multiple_manga_use_one_model_separate_directions_and_progress(self):
+        other=self.root/'manga/Other/Chapter 1';other.mkdir(parents=True)
+        Image.new('RGB',(100,100),'white').save(other/'0000.png')
+        groups=d.catalog()['manga'];directions={m['id']:'ltr' if m['name']=='Other' else 'rtl' for m in groups}
+        ids=[c['id'] for m in groups for c in m['chapters']]
+        chapters=d.selection(list(reversed(ids)),directions=directions)
+        job={'id':uuid.uuid4().hex,'status':'running','direction':None,'directions':directions,'chapters':chapters,'elapsed_seconds':0,'model':w.MODEL_ID,'revision':w.REVISION}
+        factory=Mock(side_effect=FakeDetector)
+        self.assertEqual(self.run_job(job,factory),0);self.assertEqual(factory.call_count,1)
+        self.assertEqual([c['manga'] for c in chapters],['Other','Sample'])
+        paths=[]
+        for chapter in chapters:
+            path=d.output(chapter);paths.append(path)
+            record=storage.read_json(path/'pages/0000.png.json')
+            self.assertEqual(record['reading_direction'],directions[chapter['manga_id']])
+        self.assertNotEqual(paths[0],paths[1])
+        summary=d.summary(job);self.assertEqual(summary['completed_pages'],3)
+        self.assertEqual(len(summary['manga_progress']),2)
+        self.assertTrue(all(m['completed_pages']==m['pages'] for m in summary['manga_progress']))
+        cached=d.selection(ids,directions=directions);job.update(chapters=cached,status='running')
+        no_model=Mock(side_effect=AssertionError('All pages already saved'))
+        self.assertEqual(self.run_job(job,no_model),0);no_model.assert_not_called()
+
+    def test_multi_manga_start_saves_each_setting_and_resume_keeps_directions(self):
+        other=self.root/'manga/Other/Chapter 1';other.mkdir(parents=True)
+        Image.new('RGB',(100,100),'white').save(other/'0000.png')
+        groups=d.catalog()['manga'];directions={m['id']:'ltr' if m['name']=='Other' else 'rtl' for m in groups}
+        ids=[m['chapters'][0]['id'] for m in groups]
+        with patch.object(d.subprocess,'Popen') as worker:
+            worker.return_value.pid=999999;worker.return_value.poll.return_value=None
+            response=TestClient(app).post('/api/detection/jobs',json={'chapter_ids':ids,'directions':directions})
+            self.assertEqual(response.status_code,200,response.text);saved=d.load(response.json()['id'])
+            self.assertEqual(saved['directions'],directions)
+            settings=storage.read_json(d.base()/'settings.json')
+            self.assertEqual(settings['manga/Other'],'ltr');self.assertEqual(settings['manga/Sample'],'rtl')
+            # The saved queue, not later library defaults, controls resumption.
+            d.process=d.active_id=None
+            storage.write_json(d.base()/'settings.json',{'manga/Other':'rtl','manga/Sample':'ltr'})
+            saved['status']='paused';d.save(saved)
+            resumed=d.launch(saved)
+            self.assertEqual({c['manga_id']:c['direction'] for c in resumed['chapters']},directions)
+
+    def test_multi_manga_stop_resume_preserves_completed_page(self):
+        other=self.root/'manga/Other/Chapter 1';other.mkdir(parents=True)
+        Image.new('RGB',(100,100),'white').save(other/'0000.png')
+        groups=d.catalog()['manga'];directions={m['id']:m['direction'] for m in groups}
+        ids=[m['chapters'][0]['id'] for m in groups]
+        job={'id':uuid.uuid4().hex,'status':'running','direction':'rtl','directions':directions,'chapters':d.selection(ids,directions=directions),'elapsed_seconds':0}
+        class Stops(FakeDetector):
+            def detect(self,image,direction):
+                d.stop_path(job['id']).touch();return super().detect(image,direction)
+        self.run_job(job,Stops);self.assertEqual(job['status'],'paused')
+        path=d.output(job['chapters'][0])/'pages/0000.png.json';original=path.read_bytes()
+        d.stop_path(job['id']).unlink();job['chapters']=d.selection(ids,directions=directions);job['status']='running'
+        FakeDetector.calls=[];self.assertEqual(self.run_job(job),0)
+        self.assertEqual(len(FakeDetector.calls),2);self.assertEqual(path.read_bytes(),original)
+
+    def test_unknown_per_manga_direction_rejected_without_processing(self):
+        manga=d.catalog()['manga'][0];ident=manga['chapters'][0]['id']
+        with self.assertRaises(ValueError):d.selection([ident],directions={manga['id']:'invalid'})
+        with self.assertRaises(ValueError):d.selection([ident],directions={'unknown':'rtl'})
 
 
 if __name__=='__main__':unittest.main()

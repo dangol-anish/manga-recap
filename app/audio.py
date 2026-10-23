@@ -15,7 +15,7 @@ from app import narration, storage
 # Preserve the legacy pipeline's voice; rebuilt Stage 6 uses DEFAULT_VOICE.
 VOICE = 'en-US-AndrewMultilingualNeural'
 DEFAULT_VOICE = 'en-US-BrianMultilingualNeural'
-DEFAULT_PACING={'rate':'+10%','speed':1.1,'sentence_pause':.18}
+DEFAULT_PACING={'rate':'+0%','speed':1.0,'sentence_pause':.18}
 # Base trimming profile; approved per-chapter speed/period pauses live in pacing.json.
 PAUSE_PROFILE = 'pcm-rms-v1:threshold=-45dB:min-gap=0.20:keep=0.10:window=0.01'
 lock = threading.RLock()

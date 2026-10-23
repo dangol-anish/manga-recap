@@ -106,7 +106,7 @@ def run(job, detector_factory=Detector):
                     page = source / name
                     if page.is_symlink(): raise ValueError('Symbolic-link pages cannot be processed.')
                     page_started = time.perf_counter()
-                    job.update(current_page=f'{chapter["name"]} / {name}', message='Checking saved page…')
+                    job.update(current_page=f'{chapter["manga"]} / {chapter["name"]} / {name}', message='Checking saved page…')
                     detection.save(job)
                     target = folder / 'pages' / (name + '.json')
                     picture = folder / 'previews' / (name + '.jpg')

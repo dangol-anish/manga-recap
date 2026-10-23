@@ -38,7 +38,7 @@ def publish(source, directory, label, digest, entry, extension=".mp3"):
     old=entry.get('files',{}).get(key)
     if old:
         target=directory/old
-        if target.parent==directory and not target.is_symlink() and target.is_file() and checksum(target)==digest:return
+        if target.parent==directory and not target.is_symlink() and target.is_file() and checksum(target)==digest:return target
     target=directory/(label+extension);number=2
     existing={p.name.casefold() for p in directory.iterdir()}
     while target.name.casefold() in existing:
@@ -53,6 +53,7 @@ def publish(source, directory, label, digest, entry, extension=".mp3"):
             temporary.replace(target)
         finally:temporary.unlink(missing_ok=True)
     entry.setdefault('files',{})[key]=target.name
+    return target
 
 
 def sync(mid=None, chapter=None):
@@ -103,17 +104,14 @@ def sync(mid=None, chapter=None):
                     entry=index['manga'][manga['id']]={'folder':folder.name,'chapters':{}}
                 if Path(entry['folder']).name!=entry['folder']:raise ValueError('Unsafe manga folder.')
                 manga_folder=checked(directory/entry['folder'])
-                chapter_entry=entry['chapters'].get(name)
-                if chapter_entry is None:
-                    folder=named_folder(manga_folder,name)
-                    chapter_entry=entry['chapters'][name]={'folder':folder.name}
-                if Path(chapter_entry['folder']).name!=chapter_entry['folder']:raise ValueError('Unsafe chapter folder.')
-                chapter_folder=checked(manga_folder/chapter_entry['folder'])
+                from app.media_layout import migrate,chapter_label
+                chapter_entry=entry['chapters'].setdefault(name,{})
+                migrate(manga_folder,name,chapter_entry,'Audio')
                 for source,label,digest,is_beat in files:
-                    target=checked(chapter_folder/'Voice clips') if is_beat else chapter_folder
-                    file_index=chapter_entry.setdefault('clips' if is_beat else 'full',{})
-                    publish(source,target,label,digest,file_index)
+                    prefix=chapter_label(name)
+                    suffix=label.replace(' ','')+'-Audio' if is_beat else 'Audio'
+                    publish(source,manga_folder,prefix+'-'+suffix,digest,chapter_entry.setdefault('flat',{}))
                     storage.write_json(index_path,index)
-                if mid and chapter:selected=chapter_folder
+                if mid and chapter:selected=manga_folder
         if mid and chapter and selected is None:raise ValueError('Create audio for this chapter first.')
         return selected or directory

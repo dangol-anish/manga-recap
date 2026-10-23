@@ -30,7 +30,7 @@ You can close the browser tab while the local app stays running. **Stop selected
 
 ## Find saved audio and videos
 
-Use **Open saved audio folder** on Audio or **Open saved videos folder** on Video. These buttons are always visible and open Finder on macOS or Explorer on Windows. Files are organized in `outputs/Audio/<manga name>/<chapter>/` and `outputs/Videos/<manga name>/<chapter>/`. Opening the folder prepares readable copies of saved media; it never generates new speech or video. Existing files and older versions are retained.
+Use **Open saved audio folder** on Audio or **Open saved videos folder** on Video. These buttons are always visible and open Finder on macOS or Explorer on Windows. Files are organized in `outputs/Audio/<manga name>/` and `outputs/Videos/<manga name>/`. Files use names such as `Chapter1-Audio.mp3`, `Chapter1-Beat001-Audio.mp3` and `Chapter1-Video.mp4`, with no chapter subfolders. Existing readable copies are migrated on use; old folder trees remain safely backed up under ignored `outputs/.media-folder-backups/`. Opening the folder prepares readable copies of saved media; it never generates new speech or video. Existing files and older versions are retained.
 
 ## Portable local storage
 
@@ -83,7 +83,7 @@ Use **Open folder** in the review heading to inspect the chapter output in Finde
 3. Click **Prepare panels**, then **Review panels**. Preparation preserves existing manual fixes. Review significant geometry/order mistakes. Crop padding, labeled copies and review flags follow the project rules. Failed detector pages may become flagged whole-page panels for review; invalid detections never become valid Stage 1 JSONs.
 4. Click **Export & import narration**. For each batch (at most 20 pages), download the ZIP and its current prompt. Extract the ZIP. **Start a fresh AI chat**, attach those labeled images and send the entire prompt together. Do not rely on any previous chat.
 5. Paste the AI JSON into the selected batch and click **Validate & import**. The receipt identifies the manga, chapter, batch, page revisions and prior context. IDs may repeat in another chapter, but a receipt cannot be reused there. Errors offer targeted corrections without changing a valid saved import. New replies include selected story beats, exact phrase anchors, cast, continuity, a chapter summary and durable memory updates. Imports made with the older format remain readable.
-6. Open **Audio** and generate speech. New manga default to Brian Multilingual at 1.1× with brief 180 ms period pauses; existing saved pacing stays intact. New imports with phrase anchors capture actual Edge TTS word timestamps and obtain phrase-aligned cuts automatically. Empty narration stays silent. Listen and regenerate individual beats if needed. Existing clips survive failed regeneration.
+6. Open **Audio** and generate speech. New manga default to Brian Multilingual at 1.0× with brief 180 ms period pauses; existing saved pacing stays intact. New imports with phrase anchors capture actual Edge TTS word timestamps and obtain phrase-aligned cuts automatically. Empty narration stays silent. Listen and regenerate individual beats if needed. Existing clips survive failed regeneration.
 7. Open **Video**. Preview and adjust switch times, save and render an MP4. Existing imported narration without anchors can use equal/manual timing or the phrase-map editor. Applying saved maps explicitly generates timestamped speech and rebuilds that chapter. The sharp unstretched panel, blurred background, shadow, smooth zooms/slides and short crossfades are shared across chapters.
 
 No chapters are processed automatically. One heavy detection, speech, alignment or video job runs at a time across Library. Folder discovery does not authorize a background run.
@@ -134,7 +134,7 @@ Successful imports persist beats, cast, continuity, chapter summaries and cited 
 
 ## Stage 6 Audio
 
-Open **Stage 6: Audio**, or **Continue to Audio** after importing all Stage 5 batches. Select a fully narrated chapter and press **Generate missing audio**. New chapters default to Brian Multilingual at 1.1× with measured 180 ms period pauses; chapters with existing audio retain their saved voice and pacing; narration text goes to Microsoft's online speech service and requires internet. The script is unchanged. FFmpeg must be installed and available on PATH.
+Open **Stage 6: Audio**, or **Continue to Audio** after importing all Stage 5 batches. Select a fully narrated chapter and press **Generate missing audio**. New chapters default to Brian Multilingual at 1.0× with measured 180 ms period pauses; chapters with existing audio retain their saved voice and pacing; narration text goes to Microsoft's online speech service and requires internet. The script is unchanged. FFmpeg must be installed and available on PATH.
 
 Listen to individual beats or the complete chapter, and regenerate any spoken beat. Generation runs sequentially. Stop waits for the current clip; Resume retries unfinished clips, and restarting the app leaves interrupted jobs paused. A failed generation preserves completed clips and the previous version of a regenerated beat. Silent beats have no audio. Changes to narration, selected panels, phrase anchors or source context invalidate affected clips; the app never serves stale audio as current.
 
@@ -152,3 +152,14 @@ Select a beat, adjust its panel switch times in seconds relative to the beat, th
 Click **Export MP4** for a background local 1280×720 / 24 fps H.264/AAC export, with progress, playback and download when complete. Existing beat audio is decoded into the soundtrack without TTS or script changes; MP4 uses AAC encoding. Inputs and prior exports are preserved. Changed sources/timing invalidate the current export. Render failures retain prior files, and shutdown cancels the export process safely; interrupted jobs require an explicit retry. Opening this page never exports a chapter.
 
 Stage 7 timing, cached composition frames, optional silent-padded preview audio and MP4s live under `outputs/<manga-id>/<chapter>/narration/video-stage7/`. Job records live under `data/cinema/jobs/`. Historical videos remain separate, and generated files stay ignored by Git.
+
+
+## Detect panels across manga
+
+On **Panel Detection**, choose a manga, check chapters and set its reading direction. Switch to another manga and check more chapters; previous selections stay checked. Review **Selected chapters**, then click **Start detection** once. **Select all in this manga** and **Clear this manga** affect only the current manga; **Clear all selections** resets the entire selection. Detection uses one model and processes pages sequentially, with separate progress, reading directions and output folders for each manga. Stop/resume keeps the original direction settings of the selected job and reuses unchanged saved pages.
+
+## Stage 8 Stitch
+
+Open **Stitch**, choose a manga, check at least two finished chapter videos, then press **Combine videos**. The listed filenames show exactly which saved versions will be joined. They play in natural chapter order. Progress appears directly below the button. Watch the finished MP4, use **Save video to computer**, or **Open folder**. The result is saved as `Combined video.mp4` alongside the manga's chapter videos; later versions receive numbered suffixes.
+
+Stitch uses free local FFmpeg stream copying, preserving the pictures and audio without another encode. Selected videos must have matching video and audio settings. Stop or app shutdown retains the original chapters; **Try again** restarts an interrupted join after checking its sources. Nothing starts automatically on reopening the page. Stitch never generates narration, speech or chapter videos. Job records live under ignored `data/stitch/jobs/`.

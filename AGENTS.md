@@ -1,6 +1,14 @@
+# Multi-manga panel detection
+
+- Stage 3 allows selecting chapters across multiple manga in one sequential job. Preserve selections when switching manga, show a grouped selection summary, retain each manga's own reading direction, and show per-manga and per-chapter progress. Save direction snapshots with the job and reuse them on resume even if library defaults change. Keep panel-only model filtering, output isolation and existing safe-cache/stop/resume behavior. Never automatically run real chapters during implementation.
+
+# Current approved build: Stage 8 Stitch
+
+- Add Stage 8 Stitch to select multiple finished chapter videos from the readable Videos folders, combine them in natural chapter order with a single explicit button, show progress and a native MP4 player, and save the combined MP4 beside the selected manga videos. Use lossless FFmpeg stream copying for matching video/audio formats; reject incompatible settings clearly. Keep stop/retry, persisted job recovery and existing heavy-task exclusion. Never automatically stitch real chapters during implementation. Preserve source video/audio/script/timing exactly. Migrate existing readable audio and video copies to flat manga folders, including individual beat clips; retain old trees as ignored backups. Keep the dark glass palette, shared controls, external-browser-only rule, and no automatic commit/push.
+
 # Saved media folder buttons
 
-- Audio and Video must each have an always-visible header folder button, without requiring manga/chapter selection. Open clean native Audio/Videos folders organized by readable manga name, then chapter, then playable files. Maintain safe copies; do not expose internal IDs/logs, move original assets, overwrite user changes or regenerate media when opening folders. Keep copies under ignored outputs and mapping indexes under ignored data.
+- Audio and Video must each have an always-visible header folder button, without requiring manga/chapter selection. Open clean native Audio/Videos folders organized by readable manga name with files directly inside each manga folder, such as Chapter1-Audio.mp3, Chapter1-Beat001-Audio.mp3 and Chapter1-Video.mp4. No chapter subfolders in these readable media folders. Maintain safe copies; do not expose internal IDs/logs, move original assets, overwrite user changes or regenerate media when opening folders. Keep copies under ignored outputs and mapping indexes under ignored data.
 
 # Multiple-chapter audio and video
 
@@ -12,7 +20,7 @@
 
 # Current audio default
 
-- New narration audio defaults to Brian Multilingual at 1.1× (+10%) with 180 ms period pauses. Preserve existing chapters' recorded voice, pacing, audio, phrase timestamps and videos when changing defaults; do not regenerate media automatically.
+- New narration audio defaults to Brian Multilingual at 1.0× (+0%) with 180 ms period pauses. Preserve existing chapters' recorded voice, pacing, audio, phrase timestamps and videos when changing defaults; do not regenerate media automatically.
 
 # Current approved build: Stage 7 Video
 

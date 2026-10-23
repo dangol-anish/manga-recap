@@ -90,8 +90,11 @@ async def lifespan(app):
         video_stage7.recover()
         from app import batch_work
         batch_work.recover()
+        from app import stitch
+        stitch.recover()
         yield
     finally:
+        stitch.shutdown()
         batch_work.shutdown()
         video_stage7.shutdown()
         speech_stage6.shutdown()
@@ -670,3 +673,12 @@ app.include_router(cinema_router)
 
 from app.batch_work import router as batch_work_router
 app.include_router(batch_work_router)
+
+
+@app.get('/stitch')
+def stitch_page():
+    return FileResponse(ROOT/'app/static/stitch.html')
+
+
+from app.stitch import router as stitch_router
+app.include_router(stitch_router)

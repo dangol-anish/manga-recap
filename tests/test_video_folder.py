@@ -31,19 +31,19 @@ class VideoFolderTests(unittest.TestCase):
     def test_titles_chapters_and_finished_files_without_rerendering(self):
         source=self.video();self.video('Chapter 2')
         with patch('app.video_stage7.start') as render,patch('app.speech_stage6.source') as speech:
-            root=folders.sync();chapter=root/'Readable Manga Title'/'Chapter 1'
-            self.assertEqual((chapter/'Finished video.mp4').read_bytes(),source.read_bytes())
-            self.assertTrue((root/'Readable Manga Title/Chapter 2/Finished video.mp4').is_file())
-            folders.sync();self.assertEqual(len(list(chapter.glob('*.mp4'))),1)
+            root=folders.sync();chapter=root/'Readable Manga Title'
+            self.assertEqual((chapter/'Chapter1-Video.mp4').read_bytes(),source.read_bytes())
+            self.assertTrue((root/'Readable Manga Title/Chapter2-Video.mp4').is_file())
+            folders.sync();self.assertEqual(len(list(chapter.glob('*.mp4'))),2)
             render.assert_not_called();speech.assert_not_called()
     def test_new_versions_and_user_changes_never_overwrite_originals(self):
-        old=self.video();original=old.read_bytes();root=folders.sync();chapter=root/'Readable Manga Title/Chapter 1'
+        old=self.video();original=old.read_bytes();root=folders.sync();chapter=root/'Readable Manga Title'
         self.video(token='b'*64,content=b'new finished video')
-        folders.sync();self.assertEqual((chapter/'Finished video.mp4').read_bytes(),original)
-        self.assertEqual((chapter/'Finished video (2).mp4').read_bytes(),b'new finished video')
-        (chapter/'Finished video (2).mp4').write_bytes(b'user edit')
-        folders.sync();self.assertEqual((chapter/'Finished video (2).mp4').read_bytes(),b'user edit')
-        self.assertEqual((chapter/'Finished video (3).mp4').read_bytes(),b'new finished video')
+        folders.sync();self.assertEqual((chapter/'Chapter1-Video.mp4').read_bytes(),original)
+        self.assertEqual((chapter/'Chapter1-Video (2).mp4').read_bytes(),b'new finished video')
+        (chapter/'Chapter1-Video (2).mp4').write_bytes(b'user edit')
+        folders.sync();self.assertEqual((chapter/'Chapter1-Video (2).mp4').read_bytes(),b'user edit')
+        self.assertEqual((chapter/'Chapter1-Video (3).mp4').read_bytes(),b'new finished video')
         self.assertEqual(old.read_bytes(),original)
     def test_unfinished_or_wrong_size_video_not_listed(self):
         source=self.video();source.write_bytes(b'incomplete')

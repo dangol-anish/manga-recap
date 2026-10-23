@@ -109,6 +109,13 @@ def summary(job):
     value['panels_found'] = sum(r['panels'] for r in results if r['status'] == 'valid')
     value['average_seconds_per_page'] = round(sum(r['seconds'] for r in results) / len(results), 3) if results else 0
     value['completed_chapters'] = sum(c['status'] == 'complete' for c in value['chapters'])
+    by_manga={}
+    for chapter in value['chapters']:
+        key=chapter['manga_id']
+        group=by_manga.setdefault(key,{'id':key,'name':chapter['manga'],'direction':chapter['direction'],'pages':0,'completed_pages':0,'chapters':0,'completed_chapters':0})
+        group['pages']+=len(chapter['pages']);group['completed_pages']+=len(chapter.get('results',[]))
+        group['chapters']+=1;group['completed_chapters']+=chapter['status']=='complete'
+    value['manga_progress']=list(by_manga.values())
     return value
 
 
@@ -143,17 +150,24 @@ def shutdown():
         reconcile()
 
 
-def selection(ids, direction):
-    if direction not in storage.DIRECTIONS: raise ValueError('Reading direction must be rtl or ltr.')
+def selection(ids, direction=None, directions=None):
+    if direction is not None and direction not in storage.DIRECTIONS: raise ValueError('Reading direction must be rtl or ltr.')
     all_chapters = {c['id']: (m, c) for m in catalog()['manga'] for c in m['chapters']}
     if not ids or len(set(ids)) != len(ids) or any(i not in all_chapters for i in ids): raise ValueError('Choose valid chapter folders.')
     selected = [all_chapters[i] for i in ids]
-    if len({m['id'] for m,c in selected}) != 1: raise ValueError('Choose chapters from one manga per detection job.')
+    selected_manga={m['id'] for m,c in selected}
+    directions=directions or {}
+    if set(directions)-selected_manga or any(value not in storage.DIRECTIONS for value in directions.values()):
+        raise ValueError('Choose a valid reading direction for each selected manga.')
+    if direction is not None and len(selected_manga)>1:
+        raise ValueError('For multiple manga, choose each manga reading direction separately.')
     result = []
-    for manga, chapter in sorted(selected, key=lambda pair: chapter_sort_key(pair[1]['name'])):
+    for manga, chapter in sorted(selected, key=lambda pair: (chapter_sort_key(pair[0]['name']),pair[0]['id'],chapter_sort_key(pair[1]['name']))):
         if chapter['pending']: raise ValueError('Finish interrupted renumbering before detection.')
+        effective=directions.get(manga['id'],direction or manga['direction'])
+        if effective not in storage.DIRECTIONS:raise ValueError('Choose a valid reading direction for '+manga['name'])
         folder = renumbering.folder_path(chapter['folder'])
-        result.append({'id': chapter['id'], 'manga_id': manga['id'], 'manga_folder': manga['folder'], 'manga': manga['name'], 'folder': chapter['folder'], 'name': folder.name, 'direction': direction, 'status': 'pending', 'pages': [p.name for p in renumbering.images(folder)], 'results': [], 'elapsed_seconds': 0})
+        result.append({'id': chapter['id'], 'manga_id': manga['id'], 'manga_folder': manga['folder'], 'manga': manga['name'], 'folder': chapter['folder'], 'name': folder.name, 'direction': effective, 'status': 'pending', 'pages': [p.name for p in renumbering.images(folder)], 'results': [], 'elapsed_seconds': 0})
     return result
 
 
@@ -164,7 +178,7 @@ def launch(job):
         reconcile(); ensure_idle()
         if not ready()['ready']: raise ValueError(ready()['message'])
         # Re-read source lists on every start/resume. Content hashes are checked by the worker.
-        refreshed = selection([c['id'] for c in job['chapters']], job['direction'])
+        refreshed = selection([c['id'] for c in job['chapters']], None if job.get('directions') else job.get('direction'),job.get('directions'))
         previous = {c['id']: c for c in job['chapters']}
         for c in refreshed: c['elapsed_seconds'] = previous[c['id']].get('elapsed_seconds', 0)
         job['chapters'] = refreshed
@@ -189,7 +203,8 @@ def launch(job):
 
 class Selection(BaseModel):
     chapter_ids: list[str] = Field(min_length=1, max_length=2000)
-    direction: str = 'rtl'
+    direction: str | None = None
+    directions: dict[str,str] = Field(default_factory=dict)
 
 
 @router.get('/catalog')
@@ -213,10 +228,11 @@ def start_api(body: Selection):
         with lock:
             reconcile(); ensure_idle()
             if not ready()['ready']: raise ValueError(ready()['message'])
-            chapters = selection(body.chapter_ids, body.direction)
-            job = {'id': uuid.uuid4().hex, 'status': 'pending', 'direction': body.direction, 'model': MODEL_ID, 'revision': REVISION, 'chapters': chapters, 'elapsed_seconds': 0}
+            chapters = selection(body.chapter_ids, body.direction, body.directions)
+            job = {'id': uuid.uuid4().hex, 'status': 'pending', 'direction': chapters[0]['direction'] if len({c['direction'] for c in chapters})==1 else None, 'directions': {c['manga_id']:c['direction'] for c in chapters}, 'model': MODEL_ID, 'revision': REVISION, 'chapters': chapters, 'elapsed_seconds': 0}
             result = launch(job)
-            settings = storage.read_json(base() / 'settings.json', {}); settings[chapters[0]['manga_folder']] = body.direction
+            settings = storage.read_json(base() / 'settings.json', {})
+            settings.update({c['manga_folder']:c['direction'] for c in chapters})
             storage.write_json(base() / 'settings.json', settings)
             return result
     except (FileExistsError, RuntimeError) as exc: raise HTTPException(409, str(exc))

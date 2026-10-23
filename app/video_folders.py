@@ -43,11 +43,10 @@ def sync():
                     target=named_folder(directory,title)
                     entry=index['manga'][manga['id']]={'folder':target.name,'chapters':{}}
                 manga_folder=folder(directory,entry['folder'])
-                chapter_entry=entry['chapters'].get(chapter['name'])
-                if chapter_entry is None:
-                    target=named_folder(manga_folder,chapter['name'])
-                    chapter_entry=entry['chapters'][chapter['name']]={'folder':target.name}
-                target=folder(manga_folder,chapter_entry['folder'])
-                publish(source,target,'Finished video',digest,chapter_entry,extension='.mp4')
+                from app.media_layout import migrate,chapter_label
+                chapter_entry=entry['chapters'].setdefault(chapter['name'],{})
+                migrate(manga_folder,chapter['name'],chapter_entry,'Videos')
+                target=publish(source,manga_folder,chapter_label(chapter['name'])+'-Video',digest,chapter_entry.setdefault('flat',{}),extension='.mp4')
+                chapter_entry['current']={'file':target.name,'sha256':digest,'render_token':token}
                 storage.write_json(index_path,index)
         return directory

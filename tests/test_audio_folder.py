@@ -33,16 +33,16 @@ class AudioRootFolderTests(unittest.TestCase):
             storage.write_json(original/'chapter.json',{'file':clip.name,'sha256':hashlib.sha256(clip.read_bytes()).hexdigest(),'beats':[{'beat':1,'file':clip.name},{'beat':2,'file':clip.name}]})
             catalog={'manga':[{'id':'abc','name':'technical-folder','folder':'manga/technical-folder','chapters':[{'name':'Chapter 1'}]}]}
             with patch.object(storage,'ROOT',root),patch.object(storage,'OUTPUTS',out),patch.object(storage,'DATA',data),patch('app.detection.catalog',return_value=catalog),patch.object(speech,'status',side_effect=ValueError('Old narration')):
-                library=folders.sync();chapter=library/'A Proper Manga Name'/'Chapter 1'
-                self.assertEqual((chapter/'Full chapter.mp3').read_bytes(),clip.read_bytes())
-                self.assertTrue((chapter/'Voice clips/Beat 001.mp3').is_file());self.assertTrue((chapter/'Voice clips/Beat 002.mp3').is_file())
+                library=folders.sync();chapter=library/'A Proper Manga Name'
+                self.assertEqual((chapter/'Chapter1-Audio.mp3').read_bytes(),clip.read_bytes())
+                self.assertTrue((chapter/'Chapter1-Beat001-Audio.mp3').is_file());self.assertTrue((chapter/'Chapter1-Beat002-Audio.mp3').is_file())
                 self.assertEqual(folders.sync('abc','Chapter 1'),chapter)
-                self.assertEqual(len(list(chapter.glob('*.mp3'))),1)
+                self.assertEqual(len(list(chapter.glob('*.mp3'))),3)
                 # User edits to a friendly copy never affect the internal audio.
-                (chapter/'Full chapter.mp3').write_bytes(b'user edit')
+                (chapter/'Chapter1-Audio.mp3').write_bytes(b'user edit')
                 folders.sync();self.assertEqual(clip.read_bytes(),b'original saved audio')
-                self.assertEqual((chapter/'Full chapter.mp3').read_bytes(),b'user edit')
-                self.assertEqual((chapter/'Full chapter (2).mp3').read_bytes(),clip.read_bytes())
+                self.assertEqual((chapter/'Chapter1-Audio.mp3').read_bytes(),b'user edit')
+                self.assertEqual((chapter/'Chapter1-Audio (2).mp3').read_bytes(),clip.read_bytes())
 
     def test_portable_names_and_symlink_rejected(self):
         from app import audio_folders as folders

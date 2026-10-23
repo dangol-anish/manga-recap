@@ -4,6 +4,9 @@ lock=threading.RLock()
 
 
 def ensure_idle():
+    from app import stitch
+    if stitch.active is not None:
+        raise FileExistsError('Videos are being combined. Wait or stop Stitch before starting another task.')
     from app import batch_work
     if batch_work.active is not None and threading.current_thread() is not batch_work.worker:
         raise FileExistsError('Selected chapters are being created. Wait for them to finish or stop the selection first.')

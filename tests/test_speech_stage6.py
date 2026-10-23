@@ -63,7 +63,7 @@ class SpeechTests(unittest.TestCase):
         response=self.client.get(self.speech_api);self.assertEqual(response.status_code,200)
         s=response.json();self.assertEqual(len(s['beats']),2);self.assertEqual(s['ready'],0)
         self.assertEqual(s['voice'],'en-US-BrianMultilingualNeural')
-        self.assertEqual(s['pacing'],{'rate':'+10%','speed':1.1,'sentence_pause':.18})
+        self.assertEqual(s['pacing'],{'rate':'+0%','speed':1.0,'sentence_pause':.18})
         self.assertEqual(self.said,[]);self.assertFalse(speech.root(self.mid,self.chapter).exists())
         self.assertEqual(story.state_path(self.mid).read_bytes(),before)
         self.assertEqual(self.client.get('/api/speech/catalog').json()[0]['chapters'][0]['audio_ready'],True)
@@ -172,10 +172,10 @@ class SpeechTests(unittest.TestCase):
         self.generate()
         with patch.object(speech,'open_system_folder') as opened:
             self.assertEqual(self.client.post(self.speech_api+'/open-folder',json={}).status_code,200)
-            directory=storage.OUTPUTS/'Audio'/'Sample'/self.chapter
+            directory=storage.OUTPUTS/'Audio'/'Sample'
             opened.assert_called_once_with(directory)
-            self.assertTrue((directory/'Full chapter.mp3').is_file())
-            self.assertEqual(len(list((directory/'Voice clips').glob('*.mp3'))),2)
+            self.assertTrue((directory/'Chapter1-Audio.mp3').is_file())
+            self.assertEqual(len(list(directory.glob('Chapter1-Beat*-Audio.mp3'))),2)
 
     def test_multiple_phrase_switches_use_word_timestamps(self):
         payload=self.payload();ids=self.status()['batches'][0]['panel_ids'][:2]
