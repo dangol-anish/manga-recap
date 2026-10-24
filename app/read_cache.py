@@ -62,9 +62,16 @@ def file_hash(path):
     # Windows ctime can be a creation timestamp rather than a metadata-change
     # timestamp. Keep its hashes request-local via chapter memoization instead
     # of trusting stat signatures across requests on that platform.
-    if _snapshot.get() is None or sys.platform == 'win32':
+    snapshot = _snapshot.get()
+    if snapshot is None or sys.platform == 'win32':
         stamp = file_stamp(path)
-        value = _hash_file(path)
+        key = ('request-file-hash', str(path), stamp)
+        if snapshot is not None and key in snapshot:
+            value = snapshot[key]
+        else:
+            value = _hash_file(path)
+            if snapshot is not None:
+                snapshot[key] = value
         if file_stamp(path) != stamp:
             raise FileExistsError('A source file changed during validation. Refresh and retry.')
         return value

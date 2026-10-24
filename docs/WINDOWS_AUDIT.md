@@ -2,9 +2,9 @@
 
 ## Result and verification boundary
 
-Confirmed compatibility problems were fixed, and the existing pipeline remains intact. The local regression suite and the installation media check pass on macOS. Windows x64/Python 3.11 wheels resolve for the pinned dependencies. **Native Windows execution has not occurred in this session**: the setup batch file, Windows APIs, NTFS behavior, actual CPU inference and online services still need the target Windows machine or the new Windows CI job. This is not a first-run guarantee based solely on Mac tests.
+Confirmed compatibility problems were fixed, and the existing pipeline remains intact. The local regression suite and the installation media check pass on macOS. Windows x64/Python 3.11 wheels resolve for the pinned dependencies. The first native Windows CI run installed the pinned dependencies, verified the model helper source and passed the real media doctor. Its fixture failures exposed a writable-handle flush bug, duplicate request-local hashing and platform-dependent test assumptions; the follow-up fixes below address those failures. Full model inference and online services still need the target Windows machine. This is not a first-run guarantee based solely on Mac tests.
 
-Use [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for installation, daily use, transfer of existing work and troubleshooting. No commit, push, live chapter detection, online TTS or real chapter render was performed during this audit.
+Use [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for installation, daily use, transfer of existing work and troubleshooting. The compatibility changes were committed and pushed for native CI. No live chapter detection, online TTS or real chapter render was performed during this audit.
 
 ## Scope
 
@@ -27,6 +27,13 @@ Areas examined: Python/ABI/wheel availability; CPU model loading and local cache
 | Partial/corrupt model installs could be mistaken for a usable install | Any nonempty existing model file was skipped, regardless of expected size/hash; downloads lacked integrity checks/retries. | The installer obtains the pinned manifest, checks the revision, validates LFS SHA-256 or Git blob hashes and size, retries downloads and publishes only verified files. Old files survive failed replacement attempts. Nested paths/symlinks/path escapes are checked. A source-only mode supports CI without weights. Mocked failure/retry/path fixtures pass; all 16 existing model files were independently verified against the live pinned official manifest without changing them. |
 | Test suite depended on the development machine | Some fixture temp directories required ignored `outputs/` to exist; symlink fixtures required Windows privilege; cache call-count assertions assumed the Mac branch. | Fixtures now work from a clean checkout, symlink tests explicitly skip only Windows privilege error 1314, and cache assertions account for the intentional Windows behavior. Other filesystem errors still fail. Fresh-start tests load all eight current pages/catalogs with no manga or outputs. |
 | Fresh Windows setup was underspecified | No complete Windows installation path/preflight; README mixed old ZIP/Library steps with the rebuilt workflow. | Added `setup-windows.bat`, `scripts.doctor`, a detailed Windows guide, current daily workflow and a Windows/macOS CI matrix. Windows-only `colorama` is pinned. `.gitattributes` keeps shell scripts LF and batch launchers CRLF. |
+
+## Native Windows CI follow-up — 2026-10-24
+
+- Downloader publication now writes, flushes and fsyncs through the same writable handle; Windows rejects flushing a read-only handle. A regression test simulates that restriction.
+- Windows hashes are reused within one GET request only; a subsequent request still reads fresh content.
+- Worker path assertions use native path components, and hash-count assertions retain the intentional Windows freshness behavior.
+- The camera-sampling metric uses a lossless fixture encode to exclude platform-dependent lossy edge noise; production video settings and strict smoothness thresholds are unchanged.
 
 ## Stage-by-stage review
 
@@ -53,7 +60,7 @@ All main browser pages continue to use relative HTTP URLs, native HTML audio/vid
 - `pip check`, Python compilation and `git diff --check` passed.
 - New regression coverage includes Windows API branches, cross-process locking, transient sharing failures, Unicode, portable names, a large graph/small command, clean-checkout startup and installer corruption/retry/path safety.
 
-The GitHub Actions matrix is supplied at `.github/workflows/compatibility.yml`. It installs dependencies and FFmpeg, fetches verified model helper source **without weights**, runs the media doctor and all Python/JS fixtures on Windows and macOS. **It has not been pushed or executed yet.** Full real model validation remains an explicit setup step on the target laptop.
+The GitHub Actions matrix is supplied at `.github/workflows/compatibility.yml`. It installs dependencies and FFmpeg, fetches verified model helper source **without weights**, runs the media doctor and all Python/JS fixtures on Windows and macOS. The [first native Windows run](https://github.com/dangol-anish/manga-recap/actions/runs/39957913615) passed installation and media checks but failed Python fixtures; the follow-up changes are being verified by the [latest compatibility run](https://github.com/dangol-anish/manga-recap/actions/workflows/compatibility.yml). Full real model validation remains an explicit setup step on the target laptop.
 
 ## Remaining deployment conditions
 

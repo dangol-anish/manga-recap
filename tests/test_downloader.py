@@ -88,6 +88,22 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(self.transfer().await_count,1)
         self.assertEqual(d.summary(self.job)['verified_pages'],2)
 
+    def test_download_flushes_a_writable_handle_before_publication(self):
+        handles={};flushed=[];original_open=Path.open;original_sync=d.os.fsync
+        def track(path,*args,**kwargs):
+            stream=original_open(path,*args,**kwargs)
+            if path.suffix=='.part':handles[stream.fileno()]=stream
+            return stream
+        def windows_flush(fd):
+            stream=handles.get(fd)
+            if stream is not None and not stream.closed:
+                if not stream.writable():raise OSError('Windows cannot flush a read-only handle')
+                self.assertGreater(stream.tell(),0);flushed.append(True)
+            return original_sync(fd)
+        with patch.object(Path,'open',track),patch.object(d.os,'fsync',side_effect=windows_flush):self.transfer()
+        self.assertEqual(d.summary(self.job)['verified_pages'],2)
+        self.assertEqual(len(flushed),2)
+
     def test_reject_html_failure_retry_and_resume(self):
         original_sleep=asyncio.sleep
         async def fast_sleep(_): await original_sleep(0)

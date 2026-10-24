@@ -178,9 +178,11 @@ async def transfer(job):
                             if target.exists() and page.get('file') != filename:
                                 raise ValueError('An untracked file exists at this destination; it was not overwritten.')
                             # A chapter folder belongs to one resumable job, claimed before transfer.
-                            temporary.write_bytes(data)
-                            with temporary.open('rb') as stream:
-                                import os
+                            # Windows FlushFileBuffers requires a writable handle.
+                            # Flush the original writer before closing/publishing.
+                            with temporary.open('wb') as stream:
+                                stream.write(data)
+                                stream.flush()
                                 os.fsync(stream.fileno())
                             # Persist the intended file/hash before publishing it. If the server
                             # stops between rename and completion, resume can adopt that exact file.

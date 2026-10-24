@@ -61,3 +61,12 @@ class ReadCacheTests(unittest.TestCase):
             with read_cache.read_snapshot():read_cache.file_hash(self.path)
             with read_cache.read_snapshot():read_cache.file_hash(self.path)
             self.assertEqual(reads.call_count,2)
+
+    def test_windows_reuses_hash_only_within_the_same_read_request(self):
+        with patch.object(read_cache.sys,'platform','win32'),patch.object(read_cache,'_hash_file',wraps=read_cache._hash_file) as reads:
+            with read_cache.read_snapshot():
+                first=read_cache.file_hash(self.path)
+                self.assertEqual(read_cache.file_hash(self.path),first)
+                self.assertEqual(reads.call_count,1)
+            with read_cache.read_snapshot():self.assertEqual(read_cache.file_hash(self.path),first)
+            self.assertEqual(reads.call_count,2)

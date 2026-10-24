@@ -166,7 +166,7 @@ For developer regression tests after setup (optional; Node 22 is needed only for
 Get-ChildItem tests\test_*.cjs | ForEach-Object { node $_.FullName; if ($LASTEXITCODE -ne 0) { throw "JavaScript test failed" } }
 ```
 
-Tests use synthetic fixtures and mocked model/TTS responses. Some symlink fixtures skip if Windows does not grant symlink privilege; Developer Mode can enable those fixtures and is **not** required to use the app. A Windows/macOS GitHub Actions workflow runs these checks when this change is pushed; adding it locally is not evidence of a completed Windows run.
+Tests use synthetic fixtures and mocked model/TTS responses. Some symlink fixtures skip if Windows does not grant symlink privilege; Developer Mode can enable those fixtures and is **not** required to use the app. The [Windows/macOS GitHub Actions workflow](https://github.com/dangol-anish/manga-recap/actions/workflows/compatibility.yml) runs these checks on every push; check the latest run for its native Windows result.
 
 ## Verification boundary
 

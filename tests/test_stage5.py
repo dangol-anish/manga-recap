@@ -195,7 +195,15 @@ class VideoTests(unittest.TestCase):
         state={'duration':24,'beats':[dict(self.beats[0],duration=24,switches=[6,12,18],panels=panels)]}
         work=self.root/'temporal-test';work.mkdir()
         # Measure camera movement alone; dissolve mixtures are tested separately.
-        with patch.dict(video.TRANSITION_STYLE,{'frames':0}):video.render_to(state,work)
+        # Lossy codec edge noise varies across FFmpeg/x264 builds. Use lossless
+        # H.264 here so the metric measures camera sampling, not compression.
+        execute=subprocess.run
+        def lossless(command,**kwargs):
+            command=list(command)
+            if '-crf' in command:command[command.index('-crf')+1]='0'
+            return execute(command,**kwargs)
+        with patch.dict(video.TRANSITION_STYLE,{'frames':0}),patch.object(video.subprocess,'run',side_effect=lossless):
+            video.render_to(state,work)
         data=subprocess.check_output(['ffmpeg','-nostdin','-v','error','-i',str(work/'chapter.mp4'),
               '-vf','crop=1280:2:0:360,format=gray','-f','rawvideo','-'],timeout=60)
         rows=np.frombuffer(data,dtype=np.uint8).reshape(4,144,2,1280).mean(axis=2)

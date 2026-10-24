@@ -198,7 +198,7 @@ class GenericTests(unittest.TestCase):
                 self.assertEqual(response.status_code,200,response.text)
                 command=start.call_args.args[0]
                 self.assertIn('app.worker',command)
-                self.assertIn('Episode 10',command[-1]);self.assertIn('/b/',command[-1])
+                self.assertEqual(Path(command[-1]).parts[-3:],('b','Episode 10','_job.json'))
         finally:main.process=main.active_job=None
 
     def test_old_context_receipt_requires_fresh_reply_not_metadata_swap(self):
