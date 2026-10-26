@@ -4,7 +4,7 @@ import re
 import subprocess
 import unicodedata
 import numpy as np
-from app import storage, alignment
+from app import errors, storage, alignment
 
 MODEL = 'facebook/wav2vec2-base-960h'
 REVISION = '22aad52d435eb6dbaf354bdad9b0da84ce7d6156'
@@ -87,7 +87,7 @@ class Aligner:
     def align(self, path, text, cancel, progress=lambda message: None):
         result = subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-i', str(path), '-f', 'f32le', '-ac', '1', '-ar', '16000', '-'],
                                 capture_output=True, timeout=120)
-        if result.returncode: raise ValueError('Could not decode the saved recording for local timing.')
+        errors.checked_process(result,'Decode saved recording for local timing',path)
         samples = np.frombuffer(result.stdout, dtype='<f4'); chunks = []; torch = self.torch
         if len(samples) < 16000: raise ValueError('The recording is too short for this script.')
         old_threads = torch.get_num_threads(); torch.set_num_threads(2)

@@ -1,4 +1,5 @@
 """Chapter timing and local MP4 export from existing crops and approved audio."""
+from app import errors
 from app.tasks import lock as task_lock, ensure_idle
 from functools import lru_cache
 import hashlib
@@ -355,7 +356,9 @@ def run(mid, chapter, state):
                     'width':WIDTH,'height':HEIGHT,'fps':FPS,'panels':sum(len(b['panels']) for b in state['beats']),
                     'visual_style':VISUAL_STYLE,'motion_style':MOTION_STYLE,'transition_style':TRANSITION_STYLE})
     except Exception as exc:
-        with lock:jobs[job_key(mid,chapter)].update(message=f'Export stopped: {exc}',error=True)
+        with lock:
+            detail=errors.describe(exc,'cinema','Create historical chapter video',chapter)
+            jobs[job_key(mid,chapter)].update(message=detail['message'],error=True,error_details=detail)
     finally:
         with lock:
             jobs[job_key(mid,chapter)]['running']=False

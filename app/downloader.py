@@ -1,4 +1,5 @@
 """Restart-safe image downloads. No panel detection or media conversion."""
+from app import errors
 import asyncio
 from copy import deepcopy
 from hashlib import sha256
@@ -86,8 +87,7 @@ def summary(job):
 
 
 def recover():
-    for path in (base() / 'jobs').glob('*.json'):
-        job = storage.read_json(path)
+    for path, job in errors.recovery_records(base() / 'jobs','downloader'):
         if job.get('status') in ('running', 'stopping'):
             job.update(status='paused', message='Interrupted. Resume to verify saved pages and continue.')
             save(job)
@@ -140,7 +140,8 @@ async def transfer(job):
                 chapter['discovered'] = True
                 chapter.pop('error', None)
             except Exception as exc:
-                chapter.update(status='failed', error=str(exc), discovered=False)
+                detail = errors.describe(exc, 'downloader', 'Load chapter page list', chapter['name'])
+                chapter.update(status='failed', error=detail['message'], error_details=detail, discovered=False)
             save(job)
         for chapter in job['chapters']:
             if stop_event.is_set(): return
@@ -196,8 +197,10 @@ async def transfer(job):
                             return
                         except Exception as exc:
                             with lock:
-                                page.update(status='failed', error=str(exc))
+                                detail = errors.describe(exc, 'downloader', 'Download page', chapter['name'] + ' / page ' + str(index + 1))
+                                page.update(status='failed', error=detail['message'], error_details=detail)
                                 save(job)
+                            if detail['code'] in ('disk_full','permission_denied','file_in_use','conflict','source_blocked','source_rate_limit'):break
                             if attempt < 2:
                                 for _ in range(10 * (attempt + 1)):
                                     if stop_event.is_set(): return
@@ -218,12 +221,13 @@ def run(job):
             elif all(c['status'] == 'complete' for c in job['chapters']): job.update(status='complete', message='All selected chapters downloaded and verified.')
             else: job.update(status='failed', message='Some pages or chapters failed. Resume to retry; completed images are preserved.')
     except Exception as exc:
-        with lock: job.update(status='failed', message=str(exc))
+        with lock:
+            job['status']='failed'; errors.failure(job, exc, 'downloader', 'Download selected chapters', job.get('folder'))
     finally:
         with lock:
             job['elapsed_seconds'] += time.monotonic() - active['started']
-            save(job)
-            active = None
+            try: errors.save_final(save, job, 'downloader')
+            finally: active = None
 
 
 def start(job):
@@ -251,7 +255,9 @@ def start(job):
         save(job)
         active = {'id': job['id'], 'started': time.monotonic(), 'job': job}
         thread = threading.Thread(target=run, args=(job,), daemon=True)
-        thread.start()
+        try: thread.start()
+        except Exception as exc:
+            active=None; job['status']='failed'; errors.failure(job, exc, 'downloader', 'Start download worker'); errors.save_final(save, job, 'downloader'); raise
         return summary(job)
 
 
@@ -273,7 +279,7 @@ async def catalog_api(body: SourceInput):
 @router.get('/jobs')
 def jobs_api():
     with lock:
-        return [summary(storage.read_json(p)) for p in sorted((base() / 'jobs').glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True)]
+        return list(reversed(errors.job_list(base()/'jobs','downloader',summary)))
 
 
 @router.post('/jobs')

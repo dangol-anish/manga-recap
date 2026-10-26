@@ -1,4 +1,5 @@
 """Exact phrase anchors and real speech timestamps for any registered chapter."""
+from app import errors
 from app.tasks import lock as task_lock, ensure_idle
 import asyncio
 import json
@@ -249,7 +250,7 @@ def run(mid,chapter,beat,token,mapping,pacing=None):
                 storage.write_json(root(mid, chapter)/f'beat-{beat["number"]:03}-trial.json',result)
                 jobs[job_key(mid,chapter)].update(message=f'Beat {beat["number"]} trial ready. The full chapter has not been regenerated.',error=False)
     except Exception as exc:
-        with lock:jobs[job_key(mid,chapter)].update(message=f'Trial stopped: {exc}',error=True)
+        with lock:jobs[job_key(mid,chapter)].update(message=errors.describe(exc,'speech','Create phrase alignment trial',chapter)['message'],error=True)
     finally:
         with lock:jobs[job_key(mid,chapter)]['running']=False
 
@@ -411,7 +412,7 @@ def start_chapter(mid,chapter,source_token):
             try:
                 apply_chapter(mid,chapter)
                 chapter_jobs[key].update(message='Phrase-aligned audio and video ready.',error=False)
-            except Exception as exc:chapter_jobs[key].update(message=f'Alignment stopped: {exc}. Previous chapter audio and video retained.',error=True)
+            except Exception as exc:chapter_jobs[key].update(message=errors.describe(exc,'speech','Match speech to panels',chapter)['message'],error=True)
             finally:chapter_jobs[key]['running']=False
         threading.Thread(target=work,daemon=True).start()
         return chapter_status(mid,chapter)

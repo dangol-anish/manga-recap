@@ -1,4 +1,5 @@
 """Sequential Stage 3 worker, with atomic page commits and per-page checkpoints."""
+from app import errors as error_details
 from hashlib import sha256
 import json
 import math
@@ -137,7 +138,8 @@ def run(job, detector_factory=Detector):
                                 boxes = detector.detect(image.convert('L').convert('RGB'), chapter['direction'])
                                 errors = panel_errors(boxes, image.width, image.height)
                             except Exception as exc:
-                                errors = [f'{type(exc).__name__}: {exc}']; retryable = True
+                                detail = error_details.describe(exc, 'detection', 'Detect panels', str(page))
+                                errors = [detail['message']]; retryable = True
                         if source_hash(page) != checksum: raise ValueError('A source image changed during detection. Stop editing this chapter and resume.')
                         if image is not None: preview(image, boxes, picture, stamp)
                         seconds = round(time.perf_counter() - page_started, 3)
@@ -164,11 +166,11 @@ def run(job, detector_factory=Detector):
             failed = any(c['status'] == 'failed' for c in job['chapters'])
             job.update(status='complete' if completed else 'failed' if failed else 'paused', current_page=None, message='Selected chapters finished. Review any flagged pages.' if completed else 'Some pages could not be processed. Resume to retry; valid pages are preserved.' if failed else 'Stopped. Completed pages are safe; resume when ready.')
     except Exception as exc:
-        job.update(status='failed', message=f'{type(exc).__name__}: {exc}')
+        job['status']='failed'; error_details.failure(job,exc,'detection','Process selected pages',job.get('current_page'))
         print(job['message'], flush=True)
     finally:
         job['elapsed_seconds'] = round(previous_elapsed + time.perf_counter() - started,3)
-        detection.save(job)
+        error_details.save_final(detection.save,job,'detection')
     return 0 if job['status'] in ('complete','paused') else 1
 
 

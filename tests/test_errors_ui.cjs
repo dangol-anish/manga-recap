@@ -1,0 +1,30 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+(async()=>{
+ const nodes=[],events={},docEvents={},calls=[];
+ class Element{constructor(tag){this.tagName=tag.toUpperCase();this.children=[];this.events={};nodes.push(this);}append(...children){this.children.push(...children);}prepend(...children){this.children.unshift(...children);}setAttribute(k,v){this[k]=v;}addEventListener(e,fn){this.events[e]=fn;}remove(){this.removed=true;}}
+ const main=new Element('main'),body=new Element('body');let backend;
+ const response=(status,value,header)=>({status,ok:status>=200&&status<300,headers:{get:k=>k==='X-App-Warning'?header:null},json:async()=>{if(value instanceof Error)throw value;return value;}});
+ const window={fetch:async(...args)=>{calls.push(args);return backend(...args);},addEventListener:(e,fn)=>events[e]=fn};
+ const document={body,getElementById:id=>nodes.find(n=>n.id===id&&!n.removed),querySelector:s=>s==='main'?main:null,createElement:t=>new Element(t),addEventListener:(e,fn)=>docEvents[e]=fn};
+ const context=vm.createContext({window,document,location:{href:'http://127.0.0.1:8000/speech',origin:'http://127.0.0.1:8000'},URL,AbortController,setTimeout,clearTimeout,Error});
+ vm.runInContext(fs.readFileSync('app/static/errors.js','utf8'),context);
+ backend=async()=>{throw Error('Failed to fetch');};
+ await assert.rejects(()=>window.fetch('/api/grouped-audio/start',{method:'POST'}),e=>/Stage 6: Gemini Audio/.test(e.message)&&/may already/.test(e.message)&&/127.0.0.1:8000/.test(e.message));assert.equal(calls.length,1,'Failed action must never be retried automatically');
+ backend=async()=>response(500,new Error('Unexpected token <'));
+ let value=await (await window.fetch('/api/cinema/export',{method:'POST'})).json();assert.match(value.detail,/HTTP 500/);assert.match(value.detail,/before repeating/);
+ backend=async()=>response(200,new Error('invalid JSON'));
+ await assert.rejects(async()=>{await(await window.fetch('/api/story/catalog')).json();},/unreadable response/);
+ backend=async()=>response(422,{detail:[{loc:['body','chapters'],msg:'Choose at least one'}]});
+ value=await(await window.fetch('/api/speech/start',{method:'POST'})).json();assert.equal(value.detail,'body.chapters: Choose at least one');
+ backend=async()=>response(507,{error:{message:'Stage 7: Disk full. Free space. Reference: test123.'}});
+ value=await(await window.fetch('/api/cinema/export',{method:'POST'})).json();assert.match(value.detail,/Free space/);
+ backend=async()=>response(422,{ok:false,errors:['Unknown panel p9999-1']});
+ value=await(await window.fetch('/api/story/chapter/import',{method:'POST'})).json();assert.equal(value.ok,false);assert.equal(value.errors[0],'Unknown panel p9999-1');
+ backend=async(url)=>url==='/api/errors/warn123'?response(200,{message:'Progress could not be saved. Disk full. Reference warn123.'}):response(200,{},'warn123');
+ await window.fetch('/api/speech/catalog');let banner=document.getElementById('app-error-alert-message');assert.match(banner.textContent,/Progress could not be saved/);
+ const before=calls.length;await window.fetch('/api/speech/catalog');assert.equal(calls.length,before+1,'Warning details should be fetched only once');
+ events.unhandledrejection({reason:Error('API key AQ.'+'Z'.repeat(35))});assert(!banner.textContent.includes('Z'.repeat(35)),'Browser alert must redact key patterns');
+ backend=async()=>response(409,{error:{message:'This audio is stale. Refresh the chapter; saved recordings are retained.'}});
+ const audio=new Element('audio');audio.src='http://127.0.0.1:8000/api/speech/audio';audio.error={code:2};await docEvents.error({target:audio});assert.match(banner.textContent,/audio is stale/);
+ console.log('Shared error UI: actionable connection/HTML/validation failures, no POST retries, checkpoint warning, secret redaction and media errors passed.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

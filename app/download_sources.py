@@ -112,8 +112,6 @@ async def fetch(client, url, referer, limit=MAX_HTML):
                 if not location: raise ValueError('Source redirect has no destination.')
                 url = urljoin(url, location)
                 continue
-            if response.status_code in (403, 429):
-                raise ValueError(f'Source returned HTTP {response.status_code}. Wait and retry; access may be restricted.')
             response.raise_for_status()
             data = bytearray()
             async for chunk in response.aiter_bytes():

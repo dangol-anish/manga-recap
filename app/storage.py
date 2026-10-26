@@ -15,7 +15,11 @@ DIRECTIONS = {'rtl', 'ltr'}
 def read_json(path, default=None):
     if not path.exists():
         return default
-    return json.loads(path.read_text(encoding='utf-8'))
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except (json.JSONDecodeError, UnicodeError) as exc:
+        from app.errors import SavedDataError
+        raise SavedDataError(path, exc) from exc
 
 
 def write_json(path, value):
@@ -37,6 +41,9 @@ def write_json(path, value):
                 if getattr(exc, 'winerror', None) not in (5, 32, 33) or attempt == 7:
                     raise
                 time.sleep(min(.01 * 2**attempt, .1))
+    except OSError as exc:
+        if not exc.filename:exc.filename=str(path)
+        raise
     finally:
         if os.path.exists(name):
             os.unlink(name)

@@ -1,4 +1,5 @@
 """Chapter-scoped speech. Sequential online synthesis; atomic local MP3s."""
+from app import errors
 from app.tasks import lock as task_lock, ensure_idle
 import asyncio
 import hashlib
@@ -215,7 +216,8 @@ def run(manga_id, chapter, selected, regenerate):
             jobs[job_key(manga_id,chapter)].update(message=f'Finished {len(selected)} beat(s) in {time.monotonic()-started:.1f}s.', error=False)
     except Exception as exc:
         with lock:
-            jobs[job_key(manga_id,chapter)].update(message=f'Audio generation stopped: {type(exc).__name__}: {exc}. Completed clips are safe; retry to resume.', error=True)
+            detail=errors.describe(exc,'speech','Create chapter audio',chapter)
+            jobs[job_key(manga_id,chapter)].update(message=detail['message'],error=True,error_details=detail)
     finally:
         with lock:
             jobs[job_key(manga_id,chapter)]['running'] = False

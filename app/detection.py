@@ -10,7 +10,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from app import storage, renumbering
+from app import errors, storage, renumbering
 from app.detector import MODEL_ID, REVISION
 from app.runtime import acquire_server_lock, open_system_folder
 from app.chapter_names import chapter_sort_key
@@ -122,17 +122,24 @@ def summary(job):
 def reconcile():
     global process, active_id
     if process is not None and process.poll() is not None:
-        job = load(active_id)
-        if job['status'] in ('running', 'stopping'):
-            stopped = stop_path(job['id']).exists()
-            job.update(status='paused' if stopped else 'failed', message='Stopped. Resume to continue; completed pages are safe.' if stopped else f'Worker exited ({process.returncode}). Saved pages are safe. Check the job log in its output data folder and resume.')
-            save(job)
-        process = active_id = None
+        try:
+            job=load(active_id)
+            if job['status'] in ('running','stopping'):
+                stopped=stop_path(job['id']).exists()
+                if stopped:job.update(status='paused',message='Stopped. Resume to continue; completed pages are safe.')
+                else:
+                    log=job_path(job['id']).with_suffix('.log')
+                    tail=log.read_text(encoding='utf-8',errors='replace')[-1800:] if log.is_file() and not log.is_symlink() else 'No worker log was produced.'
+                    hint='The operating system may have stopped it because of memory pressure. Close other heavy apps before resuming.' if process.returncode in (-9,137) else 'Check the worker diagnostic below, fix the cause, then resume unfinished pages.'
+                    exc=RuntimeError(f'Detection worker exited with code {process.returncode}. {hint} Worker output: {tail}');exc.code='worker_exited'
+                    job['status']='failed';errors.failure(job,exc,'detection','Run panel detection worker',job.get('current_page'))
+                errors.save_final(save,job,'detection')
+        except (ValueError,OSError,KeyError,TypeError) as exc:errors.warning(exc,'detection','Recover stopped detection worker',active_id)
+        finally:process=active_id=None
 
 
 def recover():
-    for path in (base() / 'jobs').glob('*.json'):
-        job = storage.read_json(path)
+    for path, job in errors.recovery_records(base() / 'jobs','detection'):
         if job['status'] in ('running', 'stopping'):
             stop_path(job['id']).touch()
             job.update(status='paused', message='Interrupted by shutdown. Resume to verify saved results and continue.')
@@ -218,7 +225,7 @@ def jobs_api():
     from app.tasks import lock
     with lock:
         reconcile()
-        return [summary(storage.read_json(p)) for p in sorted((base() / 'jobs').glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True)]
+        return list(reversed(errors.job_list(base()/'jobs','detection',summary)))
 
 
 @router.post('/jobs')

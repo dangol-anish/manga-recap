@@ -1,4 +1,5 @@
 """Persistent chapter queues using the existing, isolated audio/video workers."""
+from app import errors
 import copy
 import threading
 import time
@@ -32,13 +33,15 @@ def save(job): storage.write_json(path(job['kind']), job)
 
 
 def recover():
-    for kind in ('audio', 'video'):
-        job = storage.read_json(path(kind))
-        if job and job['status'] in ('running', 'stopping'):
-            job['status'] = 'paused'
-            for item in job['items']:
-                if item['status'] == 'running': item.update(status='waiting', message='Stopped. Resume to continue.')
-            save(job)
+    for kind in ('audio','video'):
+        try:
+            job=storage.read_json(path(kind))
+            if job and job['status'] in ('running','stopping'):
+                job['status']='paused'
+                for item in job['items']:
+                    if item['status']=='running':item.update(status='waiting',message='Stopped. Resume to continue.')
+                save(job)
+        except (ValueError,OSError,KeyError,TypeError) as exc:errors.warning(exc,'speech' if kind=='audio' else 'cinema','Recover selected chapter queue',path(kind))
 
 
 def snapshot(kind, mid, chapter):
@@ -104,18 +107,22 @@ def run(job):
                     item.update(status='complete', message='Ready', progress=1); save(job)
             except Exception as exc:
                 with lock:
-                    item.update(status='waiting' if cancel.is_set() else 'failed', message=str(exc)); save(job)
+                    item.update(status='waiting' if cancel.is_set() else 'failed')
+                    errors.failure(item,exc,'speech' if job['kind']=='audio' else 'cinema','Create selected chapter',item['chapter']);save(job)
         with lock:
             for item in job['items']:
                 if item['status'] == 'running': item.update(status='waiting', message='Stopped. Resume to continue.')
             remaining = any(i['status'] != 'complete' for i in job['items'])
             job['status'] = 'paused' if cancel.is_set() and remaining else 'failed' if remaining else 'complete'
             save(job)
+    except Exception as exc:
+        job['status']='failed';errors.failure(job,exc,'speech' if job['kind']=='audio' else 'cinema','Create selected chapter queue')
     finally:
         with lock:
-            if job['status'] in ('running', 'stopping'):
-                job['status'] = 'paused'; save(job)
-            active = None
+            try:
+                if job['status'] in ('running','stopping'):job['status']='paused'
+                errors.save_final(save,job,'speech' if job['kind']=='audio' else 'cinema')
+            finally:active=None
 
 
 def launch(job):

@@ -1,4 +1,5 @@
 """Independent Shorts projects built from selected, current narration snapshots."""
+from app import errors
 import copy
 import json
 import math
@@ -283,7 +284,8 @@ def public(project):
             try:
                 result_path(project, short); item['ready'] = not result['stale']; item['duration'] = short['result']['duration']
                 item['video_url'] = f'/api/shorts/projects/{project["id"]}/shorts/{short["id"]}/video?v={short["result"]["sha256"]}'
-            except (ValueError, OSError): pass
+            except (ValueError, OSError) as exc:
+                detail=errors.warning(exc,'shorts','Read saved short',short['title']);item['unavailable_reason']=detail['message']
         item['clips_ready'] = sum(clip_ready(project['id'], short['clips'].get(str(i), {}), clip_token(project, short, i)) for i in range(len(short['segments'])))
         result['shorts'].append(item)
     return result
@@ -398,7 +400,9 @@ def run(pid, selected):
     except Exception as exc:
         with lock:
             project = load(pid); project['job'].update(status='paused' if isinstance(exc, InterruptedError) else 'failed',
-                message='Stopped safely. Saved clips will be reused when you try again.' if isinstance(exc, InterruptedError) else str(exc)); save(project)
+                message='Stopped safely. Saved clips will be reused when you try again.' if isinstance(exc, InterruptedError) else str(exc))
+            if not isinstance(exc,InterruptedError): errors.failure(project['job'],exc,'shorts','Create selected short',project['job'].get('current_short'))
+            errors.save_final(save,project,'shorts')
     finally:
         with lock: active = None
 
@@ -423,9 +427,11 @@ def start(pid, revision, ids):
 
 def recover():
     for path in safe(storage.DATA / 'shorts').glob('*/project.json'):
-        project = load(path.parent.name)
-        if project.get('job') and project['job']['status'] in ('running', 'stopping'):
-            project['job'].update(status='paused', message='The app closed. Saved clips are safe; select shorts and try again.'); save(project)
+        try:
+            project=load(path.parent.name)
+            if project.get('job') and project['job']['status'] in ('running','stopping'):
+                project['job'].update(status='paused',message='The app closed. Saved clips are safe; select shorts and try again.');save(project)
+        except (ValueError,OSError,KeyError,TypeError) as exc:errors.warning(exc,'shorts','Recover Shorts project',path)
 
 
 def shutdown():

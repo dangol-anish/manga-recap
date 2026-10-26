@@ -50,76 +50,72 @@ def stop():
 
 @asynccontextmanager
 async def lifespan(app):
-    DATA.mkdir(exist_ok=True)
-    lock = acquire_server_lock(DATA / 'server.lock')
-    # A separate worker can survive a forced server kill. Terminate that precise
-    # repo worker before recovering its job, so two processes never write a page.
-    for path in OUTPUTS.glob('*/*/_job.json'):
-        job = read_json(path)
-        if job['status'] == 'running':
-            pid = job.get('pid')
-            if sys.platform == 'win32':
-                try:
-                    acquire_server_lock(path.with_name('_worker.lock')).close()
-                except RuntimeError as exc:
-                    lock.close()
-                    raise RuntimeError('An earlier Library worker is still finishing. Wait for it to exit before restarting the app; do not run a second copy.') from exc
-            if pid and sys.platform != 'win32':
-                result = subprocess.run(['ps', '-p', str(pid), '-o', 'command='], capture_output=True, text=True, encoding='utf-8', errors='replace')
-                expected = f'{sys.executable} -m app.worker {path}'
-                if result.stdout.strip() == expected:
-                    import os, signal, time
-                    os.kill(pid, signal.SIGTERM)
-                    for _ in range(50):
-                        try:
-                            os.kill(pid, 0)
-                        except ProcessLookupError:
-                            break
-                        time.sleep(0.1)
-                    else:
-                        try:
-                            os.kill(pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
-            job.update(status='paused', message='Interrupted by shutdown. Resume this chapter to continue.')
-            write_json(path, job)
     try:
-        from app import downloader
-        downloader.recover()
-        from app import detection
-        detection.recover()
-        from app import panel_preparation
-        panel_preparation.recover()
-        from app import speech_stage6
-        speech_stage6.recover()
-        from app import video_stage7
-        video_stage7.recover()
-        from app import batch_work
-        batch_work.recover()
-        from app import stitch
-        stitch.recover()
-        from app import shorts
-        shorts.recover()
-        from app import grouped_audio
-        grouped_audio.recover()
-        yield
+        DATA.mkdir(exist_ok=True)
+        lock = acquire_server_lock(DATA / 'server.lock')
+    except Exception as exc:
+        raise RuntimeError(errors.describe(exc,'startup','Open local app storage',DATA)['message']) from exc
+    try:
+        # A separate worker can survive a forced server kill. Terminate that precise
+        # repo worker before recovering its job, so two processes never write a page.
+        for path in OUTPUTS.glob('*/*/_job.json'):
+            try: job = read_json(path)
+            except (ValueError,OSError) as exc:
+                try:acquire_server_lock(path.with_name('_worker.lock')).close()
+                except RuntimeError as busy:
+                    raise RuntimeError(errors.describe(busy,'startup','Check earlier worker before recovery',path)['message']) from busy
+                errors.warning(exc,'startup','Recover historical worker',path);continue
+            if not isinstance(job,dict) or 'status' not in job:
+                errors.warning(ValueError('Saved historical worker has no valid status. File was retained.'),'startup','Recover historical worker',path);continue
+            if job['status'] == 'running':
+                pid = job.get('pid')
+                if sys.platform == 'win32':
+                    try:
+                        acquire_server_lock(path.with_name('_worker.lock')).close()
+                    except RuntimeError as exc:
+                        lock.close()
+                        raise RuntimeError('An earlier Library worker is still finishing. Wait for it to exit before restarting the app; do not run a second copy.') from exc
+                if pid and sys.platform != 'win32':
+                    result = subprocess.run(['ps', '-p', str(pid), '-o', 'command='], capture_output=True, text=True, encoding='utf-8', errors='replace')
+                    expected = f'{sys.executable} -m app.worker {path}'
+                    if result.stdout.strip() == expected:
+                        import os, signal, time
+                        os.kill(pid, signal.SIGTERM)
+                        for _ in range(50):
+                            try:
+                                os.kill(pid, 0)
+                            except ProcessLookupError:
+                                break
+                            time.sleep(0.1)
+                        else:
+                            try:
+                                os.kill(pid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                job.update(status='paused', message='Interrupted by shutdown. Resume this chapter to continue.')
+                write_json(path, job)
+        from importlib import import_module
+        modules = [import_module('app.' + name) for name in ('downloader','detection','panel_preparation','speech_stage6','video_stage7','batch_work','stitch','shorts','grouped_audio')]
+        try:
+            for module in modules:
+                try: module.recover()
+                except Exception as exc: errors.warning(exc,'startup','Recover ' + module.__name__.split('.')[-1],module.__name__)
+            yield
+        finally:
+            for module in reversed(modules):
+                try: module.shutdown()
+                except Exception as exc: errors.warning(exc,'startup','Stop ' + module.__name__.split('.')[-1])
+            with mutex:
+                stop()
     finally:
-        grouped_audio.shutdown()
-        shorts.shutdown()
-        stitch.shutdown()
-        batch_work.shutdown()
-        video_stage7.shutdown()
-        speech_stage6.shutdown()
-        panel_preparation.shutdown()
-        detection.shutdown()
-        downloader.shutdown()
-        with mutex:
-            stop()
         lock.close()
+
 
 
 app = FastAPI(title='Manga Recap Library', lifespan=lifespan)
 app.mount('/static', StaticFiles(directory=ROOT / 'app/static'), name='static')
+from app import errors
+errors.install(app)
 
 
 @app.middleware('http')
@@ -132,11 +128,18 @@ async def local_requests(request: Request, call_next):
     origin = request.headers.get('origin')
     if origin and origin not in {f'http://{request.headers.get("host")}', f'https://{request.headers.get("host")}'}:
         return JSONResponse({'detail': 'Use this app from its local page.'}, status_code=403)
-    if request.method == 'GET':
-        from app.read_cache import read_snapshot
-        with read_snapshot():
-            return await call_next(request)
-    return await call_next(request)
+    try:
+        if request.method == 'GET':
+            from app.read_cache import read_snapshot
+            with read_snapshot(): response = await call_next(request)
+        else: response = await call_next(request)
+    except Exception as exc:
+        stage, operation = errors.context(request.url.path, request.method)
+        value = errors.describe(exc, stage, operation)
+        response = JSONResponse({'detail': value['message'], 'error': value}, status_code=value['status'])
+    reference = errors.latest_warning()
+    if reference: response.headers['X-App-Warning'] = reference
+    return response
 
 
 @app.get('/')

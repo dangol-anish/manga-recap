@@ -197,7 +197,9 @@ class StoryTests(unittest.TestCase):
     def test_failed_photo_export_is_not_published(self):
         self.ready();b=self.status()['batches'][0]
         with patch.object(story.shutil,'copyfile',side_effect=OSError('disk full')):
-            self.assertEqual(self.export(b).status_code,400)
+            response=self.export(b)
+            self.assertEqual(response.status_code,507)
+            self.assertEqual(response.json()['error']['code'],'disk_full')
         self.assertEqual(list((story.root(self.mid,self.chapter)/'exports').iterdir()),[])
 
     def test_final_choice_and_path_validation(self):

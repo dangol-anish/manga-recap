@@ -1,4 +1,5 @@
 """Join selected finished chapter videos without changing their audio or pictures."""
+from app import errors
 import copy
 import hashlib
 import json
@@ -63,7 +64,7 @@ def source_path(relative):
 @lru_cache(maxsize=128)
 def probe(path,digest):
     result=subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(path)],capture_output=True,text=True,timeout=30, encoding='utf-8', errors='replace')
-    if result.returncode:raise ValueError('This video could not be read: '+Path(path).name)
+    errors.checked_process(result,'Read chapter video',path)
     data=json.loads(result.stdout);streams=data.get('streams',[])
     v=next((s for s in streams if s['codec_type']=='video'),None);a=next((s for s in streams if s['codec_type']=='audio'),None)
     duration=float(data.get('format',{}).get('duration',0))
@@ -80,7 +81,8 @@ def catalog():
             if path.is_symlink():continue
             relative=path.relative_to(storage.ROOT).as_posix();source_path(relative);digest=checksum(path)
             try:metadata=probe(str(path),digest)
-            except (ValueError,OSError,subprocess.SubprocessError):continue
+            except (ValueError,OSError,subprocess.SubprocessError) as exc:
+                errors.warning(exc,'stitch','Read finished chapter video',path);continue
             ident=hashlib.sha256((mid+'/'+path.name+'/'+digest).encode()).hexdigest()[:32]
             videos.append({'id':ident,'filename':path.name,'relative':relative,'sha256':digest,**metadata})
         if videos:groups.append({'id':mid,'name':folder.name,'folder':folder.relative_to(storage.ROOT).as_posix(),'videos':videos})
@@ -95,9 +97,7 @@ def validate(items):
 
 
 def recover():
-    for path in jobs_root().glob('*.json'):
-        if path.is_symlink():continue
-        job=storage.read_json(path)
+    for path,job in errors.recovery_records(jobs_root(),'stitch'):
         if job['status'] in ('running','stopping'):
             job.update(status='paused',message='Stopped when the app closed. Your chapter videos are safe. Try again when ready.');save(job)
 
@@ -157,14 +157,15 @@ def run(job):
             target=publish(output,folder,'Combined video',checksum(output),{},extension='.mp4')
             job.update(status='complete',progress=1,message='Your combined video is ready.',output=target.relative_to(storage.ROOT).as_posix(),output_sha256=checksum(target),duration=metadata['duration'])
     except InterruptedError:job.update(status='paused',message='Stopped. Your chapter videos are unchanged. Try again when ready.')
-    except Exception as exc:job.update(status='failed',message=str(exc))
+    except Exception as exc:
+        job['status']='failed'; errors.failure(job, exc, 'stitch', 'Combine selected videos', job.get('manga_folder'))
     finally:
         if process and process.poll() is None:
             process.terminate()
             try:process.wait(5)
             except subprocess.TimeoutExpired:process.kill();process.wait()
         with lock:
-            try:save(job)
+            try:errors.save_final(save,job,'stitch')
             finally:active=None
 
 

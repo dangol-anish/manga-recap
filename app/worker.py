@@ -1,3 +1,4 @@
+from app import errors as error_details
 import os
 import subprocess
 import sys
@@ -76,7 +77,7 @@ def run(job_file):
                 write_json(job_file, job)
             job.update(status='flagged' if flagged else 'complete', current_page=None, message='Chapter finished' if not flagged else f'Chapter finished; {len(flagged)} page(s) flagged')
     except Exception as exc:
-        job.update(status='error', message=f'{type(exc).__name__}: {exc}')
+        job['status']='error';error_details.failure(job,exc,'detection','Process chapter pages',chapter)
         print(job['message'], flush=True)
     finally:
         elapsed = round(time.perf_counter()-started, 3)

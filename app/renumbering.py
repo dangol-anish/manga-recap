@@ -1,4 +1,5 @@
 """Explicit, journaled, collision-safe renumbering of repo-local chapter images."""
+from app import errors
 from hashlib import sha256
 from pathlib import PurePosixPath
 import os
@@ -170,7 +171,8 @@ def execute(chapter):
         return {'folder': tx['folder'], 'images': len(tx['entries']), 'renamed': sum(e['from'] != e['to'] for e in tx['entries']), 'status': 'complete'}
     except Exception:
         tx['status'] = 'interrupted'
-        save_transaction(tx, folder)
+        try:save_transaction(tx, folder)
+        except Exception as checkpoint_error:errors.warning(checkpoint_error,'renumbering','Save renumbering recovery transaction',folder)
         raise
 
 
@@ -185,7 +187,8 @@ def apply(ident):
             try:
                 results.append(execute(chapter))
             except (ValueError, OSError) as exc:
-                results.append({'folder': chapter['folder'], 'status': 'failed', 'error': str(exc)})
+                detail=errors.describe(exc,'renumbering','Renumber selected images',chapter['folder'])
+                results.append({'folder': chapter['folder'], 'status': 'failed', 'error': detail['message'],'error_details':detail})
             storage.write_json(document('plans', ident), plan)
         plan.update(status='complete' if all(r['status'] == 'complete' for r in results) else 'needs_attention', results=results)
         storage.write_json(document('plans', ident), plan)

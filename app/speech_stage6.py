@@ -1,4 +1,5 @@
 """Stage 6 speech from the rebuilt narration store; never reads legacy media."""
+from app import errors
 import math
 from pathlib import Path
 import shutil
@@ -116,14 +117,14 @@ def job_path(ident):
 
 
 def jobs():
-    return sorted((storage.read_json(p) for p in (storage.DATA/'speech/jobs').glob('*.json') if not p.is_symlink()),key=lambda j:j['created_at'],reverse=True)
+    return sorted(errors.job_list(storage.DATA/'speech/jobs','speech'),key=lambda j:j.get('created_at',0),reverse=True)
 
 
 def save_job(job):storage.write_json(job_path(job['id']),job)
 
 
 def recover():
-    for job in jobs():
+    for _,job in errors.recovery_records(storage.DATA/'speech/jobs','speech'):
         if job['status'] in ('running','stopping'):
             job.update(status='paused',message='Interrupted. Completed clips are saved; resume when ready.')
             save_job(job)
@@ -258,11 +259,12 @@ def run(job):
                     job.update(message='Assembling full chapter audio…');save_job(job)
                 build_full(job['manga_id'],job['chapter'],current['revision'])
         job.update(status='complete' if complete else 'paused',message='Audio generation complete.' if complete else 'Stopped after the current beat. Completed clips are saved.')
-    except Exception as exc:job.update(status='failed',message=f'{type(exc).__name__}: {exc}. Completed clips are saved; resume to retry.')
+    except Exception as exc:
+        job['status']='failed'; errors.failure(job, exc, 'speech', 'Create narration audio', job['chapter'] + ' / beat ' + str(job.get('current_beat') or '?'))
     finally:
         with lock:
             job.update(elapsed_seconds=base+time.monotonic()-start,current_beat=None)
-            try:save_job(job)
+            try:errors.save_final(save_job,job,'speech')
             finally:active=None
 
 
@@ -333,11 +335,16 @@ def catalog_api():
     for group in groups:
         for chapter in group['chapters']:
             chapter['audio_ready']=False
+            chapter['audio_blocked_reason']='Finish current panel preparation in Stage 4 first.'
             if chapter['ready']:
                 try:
                     s=story.status(group['id'],chapter['name'])
                     chapter['audio_ready']=bool(s['batches'] and all(b['imported'] for b in s['batches']))
-                except (ValueError,OSError):pass
+                    missing=[b['id'] for b in s['batches'] if not b['imported']]
+                    chapter['audio_blocked_reason']='' if chapter['audio_ready'] else 'Stage 5 narration missing or stale: '+(', '.join(missing) or 'no current batches')+'.'
+                except (ValueError,OSError) as exc:
+                    detail=errors.warning(exc,'speech','Check narration readiness',chapter['name'])
+                    chapter['audio_blocked_reason']=detail['reason']+' Reference: '+detail['reference']
     return groups
 
 

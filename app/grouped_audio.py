@@ -22,7 +22,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from app import storage, narration_stage5 as story, alignment, audio, video
+from app import errors, storage, narration_stage5 as story, alignment, audio, video
 from app.chapter_names import chapter_sort_key
 from app.audio_folders import safe_name
 from app.runtime import open_system_folder
@@ -143,6 +143,7 @@ def pause_key(key, error, data):
             match = re.fullmatch(r'(\d+(?:\.\d+)?)s', str(detail.get('retryDelay', '')))
             if match: delay = max(delay, min(86400, float(match[1])))
         entry.update(reason='Temporary request/token limit; cooling down', until=time.time() + delay)
+    elif error.code=='free_tier_unavailable': entry.update(reason='Free tier unavailable for this Google project; replace its key',blocked=True)
     else: entry.update(reason='Key rejected or TTS model access unavailable', blocked=True)
     states[key_token(key)] = entry
     storage.write_json(safe(storage.DATA / 'gemini-key-state.json'), states)
@@ -187,6 +188,8 @@ def classify(status, data, key=''):
     message = str(error.get('message', ''))
     if key: message = message.replace(key, '[hidden]')
     details = json.dumps(error.get('details', [])); evidence = message + details
+    if status == 403 and 'free tier is not available' in evidence.lower():
+        return AudioError('free_tier_unavailable','Google says this project has no free-tier access. Replace this key with one from a free-tier eligible project. Billing was not enabled; completed recordings are saved.')
     if status in (401, 403) or re.search(r'API_KEY_INVALID|API key not valid|API key expired', evidence, re.I):
         return AudioError('api_key_rejected', 'Google rejected the API key or this project’s access. Check the key and model access in AI Studio. No billing was enabled. Saved sections are safe.')
     if status == 429:
@@ -221,7 +224,7 @@ def gemini(text, target):
         except ValueError: raise AudioError('invalid_response', 'Google returned an unreadable response. Saved sections are safe. No automatic duplicate request was made.') from None
         if response.status_code == 200: break
         error = classify(response.status_code, data, key)
-        if error.code not in ('daily_quota', 'temporary_rate_limit', 'api_key_rejected', 'model_unavailable'): raise error
+        if error.code not in ('daily_quota', 'temporary_rate_limit', 'api_key_rejected', 'model_unavailable', 'free_tier_unavailable'): raise error
         pause_key(key, error, data)
     blocks = [c for s in data.get('steps', []) if s.get('type') == 'model_output' for c in s.get('content', []) if c.get('type') == 'audio']
     if data.get('status') != 'completed' or not blocks:
@@ -309,7 +312,7 @@ def record_section(job, section):
         settings = dict(job.get('backup_pacing', LEGACY_BACKUP_PACING))
         spoken = alignment.speech(section['text'], mp3, settings, audio.DEFAULT_VOICE)
         result = subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-i', str(mp3), '-ar', '24000', '-ac', '1', str(file)], capture_output=True, timeout=120)
-        if result.returncode: raise ValueError('Could not save the Brian backup recording.')
+        errors.checked_process(result,'Save Brian backup recording',file)
         # Edge timestamps are already accurate; avoid the local model for backup sections.
         section['timing'] = spoken['words']; meta = {'provider': 'brian', 'voice': audio.DEFAULT_VOICE, 'duration': spoken['duration'], 'speed': settings['speed'], 'pacing': settings}
     meta.update(file=file.name, sha256=checksum(file)); section['recording'] = meta; save(job)
@@ -324,7 +327,7 @@ def prepare_speed(job, section):
     temporary = target.with_name('.' + target.name)
     try:
         result = subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-i', str(original), '-af', f'atempo={speed}', '-ar', '24000', '-ac', '1', str(temporary)], capture_output=True, timeout=180)
-        if result.returncode: raise ValueError('Could not prepare the faster playback copy. The original recording is saved; resume retries locally.')
+        errors.checked_process(result,'Prepare faster playback copy; original recording is retained',original)
         with wave.open(str(temporary), 'rb') as stream: duration = stream.getnframes() / stream.getframerate()
         if not math.isfinite(duration) or abs(duration - meta['duration'] / speed) > .15: raise ValueError('Faster audio duration did not match the selected speed. Original audio is retained.')
         temporary.replace(target)
@@ -367,7 +370,7 @@ def publish_chapters(job):
                     temporary = target.with_name('.' + uuid.uuid4().hex + '.mp3')
                     try:
                         result = subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-ss', str(begin), '-i', str(recording), '-t', str(end - begin), '-ar', '24000', '-ac', '1', '-codec:a', 'libmp3lame', '-b:a', '96k', str(temporary)], capture_output=True, timeout=120)
-                        if result.returncode: raise ValueError('Could not prepare chapter voice clips from the saved section.')
+                        errors.checked_process(result,'Prepare chapter voice clips',recording)
                         from mutagen.mp3 import MP3
                         if abs(MP3(temporary).info.length - (end - begin)) > .2: raise ValueError('Chapter clip duration did not match its speech timing.')
                         temporary.replace(target)
@@ -407,9 +410,9 @@ def assemble(job):
             for section in job['sections']:
                 if cancel.is_set(): raise InterruptedError()
                 result = subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-i', str(metadata_file(job, section['recording'])), '-f', 's16le', '-ac', '1', '-ar', '24000', '-'], stdout=out, stderr=subprocess.PIPE, timeout=120)
-                if result.returncode: raise ValueError('Could not join the saved audio sections.')
+                errors.checked_process(result,'Join selected audio sections')
         result = subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-f', 's16le', '-ar', '24000', '-ac', '1', '-i', str(pcm), '-codec:a', 'libmp3lame', '-b:a', '128k', str(target)], capture_output=True, timeout=180)
-        if result.returncode: raise ValueError('Could not save the full selection audio.')
+        errors.checked_process(result,'Save full selection audio',target)
     fresh(job); job['full'] = {'file': target.name, 'sha256': checksum(target)}; save(job)
     # Keep a readable flat copy beside the manga's chapter audio.
     copy_full(job)
@@ -461,16 +464,12 @@ def run(job):
     except InterruptedError:
         job.update(status='paused', message='Stopped safely. Returned recordings and completed timing are saved. Resume continues with the missing work.')
     except Exception as exc:
-        if isinstance(exc, AudioError): error = {'code': exc.code, 'message': str(exc), 'reset_at': exc.reset}
-        elif isinstance(exc, FileExistsError): error = {'code': 'source_changed', 'message': str(exc), 'reset_at': None}
-        else: error = {'code': 'local_processing', 'message': 'Audio processing failed: ' + str(exc) + '. Saved recordings are retained. Resume retries unfinished work.', 'reset_at': None}
-        # Never persist or return a credential that might appear in a dependency error.
-        for _, credential in credentials(): error['message'] = error['message'].replace(credential, '[hidden]')
-        job.update(status='failed', error=error, message=error['message'])
+        job['status']='failed'
+        errors.failure(job,exc,'grouped-audio','Create or time narration section', 'section ' + str(job.get('current_section') or '?'))
     finally:
         aligner = None
         with lock:
-            try: save(job)
+            try: errors.save_final(save,job,'grouped-audio')
             finally: active = None
 
 
@@ -525,8 +524,7 @@ def resume(ident, brian=False):
 
 
 def recover():
-    for file in safe(storage.DATA / 'grouped-audio').glob('*.json'):
-        job = load(file.stem)
+    for file,job in errors.recovery_records(safe(storage.DATA / 'grouped-audio'),'grouped-audio'):
         if job['status'] in ('running', 'stopping'):
             job.update(status='paused', message='The app closed. Returned recordings are saved. Resume when ready.'); save(job)
 

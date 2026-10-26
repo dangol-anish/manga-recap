@@ -1,4 +1,5 @@
 """Rebuilt video timeline: Stage 4 crops + Stage 6 clips; no synthesis."""
+from app import errors
 import json
 from pathlib import Path
 import shutil
@@ -83,11 +84,11 @@ def job_path(ident):
 
 
 def jobs():
-    return sorted([storage.read_json(p) for p in (storage.DATA/'cinema/jobs').glob('*.json') if not p.is_symlink()],key=lambda j:j['created_at'],reverse=True)
+    return sorted(errors.job_list(storage.DATA/'cinema/jobs','cinema'),key=lambda j:j.get('created_at',0),reverse=True)
 
 
 def recover():
-    for job in jobs():
+    for _,job in errors.recovery_records(storage.DATA/'cinema/jobs','cinema'):
         if job['status']=='running':
             job.update(status='interrupted',message='Video creation stopped. Your saved videos are safe. Click Create video to try again.')
             storage.write_json(job_path(job['id']),job)
@@ -168,11 +169,12 @@ def run(mid,chapter,snapshot,job):
                     if backup:backup.unlink(missing_ok=True)
         job.update(status='complete',progress=1,message='Your video is ready to watch and save.')
     except InterruptedError:job.update(status='interrupted',message='Video creation stopped. Your saved videos are safe.')
-    except Exception as exc:job.update(status='failed',message=f'Could not create the video: {exc}. Your saved videos are safe.')
+    except Exception as exc:
+        job['status']='failed'; errors.failure(job, exc, 'cinema', 'Create chapter video', chapter)
     finally:
         with lock:
             job.update(elapsed_seconds=time.time()-job['created_at']);job.pop('progress_path',None)
-            try:storage.write_json(job_path(job['id']),job)
+            try:errors.save_final(lambda value:storage.write_json(job_path(value['id']),value),job,'cinema')
             finally:active=None
 
 
@@ -227,10 +229,14 @@ def catalog_api():
     for group in groups:
         for chapter in group['chapters']:
             chapter['video_ready']=False
+            chapter['video_blocked_reason']=chapter.get('audio_blocked_reason') or 'Create current audio in Stage 6 first.'
             if chapter['audio_ready']:
                 try:
                     s=speech.status(group['id'],chapter['name']);chapter['video_ready']=s['ready']==s['spoken']
-                except (ValueError,OSError):pass
+                    chapter['video_blocked_reason']='' if chapter['video_ready'] else str(s['spoken']-s['ready'])+' spoken beats have missing or outdated audio in Stage 6.'
+                except (ValueError,OSError) as exc:
+                    detail=errors.warning(exc,'cinema','Check audio readiness',chapter['name'])
+                    chapter['video_blocked_reason']=detail['reason']+' Reference: '+detail['reference']
     return groups
 
 

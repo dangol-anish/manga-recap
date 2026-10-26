@@ -1,4 +1,5 @@
 """Stage 4: saved detections -> crops, labeled pages and independent manual edits."""
+from app import errors
 from hashlib import sha256
 import json
 import os
@@ -219,18 +220,22 @@ def run(job):
                 try:
                     record,cached=prepare_one(chapter,page,ids[page.name],report)
                     result={'page':page.name,'status':'prepared','panels':len(record['panels']),'flagged':record['flagged'],'cached':cached}
-                except Exception as exc:result={'page':page.name,'status':'error','error':str(exc)}
+                except Exception as exc:
+                    detail=errors.describe(exc,'preparation','Prepare panel crops and labeled page',str(page))
+                    result={'page':page.name,'status':'error','error':detail['message'],'error_details':detail}
                 with lock:entry['results'].append(result);save_job(job)
             chapter_data(entry['id'],persist=True)
             entry['status']='complete' if len(entry['results'])==len(files) and all(r['status']=='prepared' for r in entry['results']) else 'paused' if stop_event.is_set() else 'failed'
         with lock:
             job.update(status='paused' if stop_event.is_set() else 'complete' if all(c['status']=='complete' for c in job['chapters']) else 'failed',message='Stopped. Completed page assets are safe.' if stop_event.is_set() else 'Preparation finished. Review the labeled pages below.')
     except Exception as exc:
-        with lock:job.update(status='failed',message=str(exc))
+        with lock:
+            job['status']='failed'; errors.failure(job,exc,'preparation','Prepare selected chapters',job.get('message'))
     finally:
         with lock:
             job['elapsed_seconds']=round(time.monotonic()-active['started'],2)
-            save_job(job);active=None
+            try:errors.save_final(save_job,job,'preparation')
+            finally:active=None
 
 
 def start(job):
@@ -242,13 +247,15 @@ def start(job):
             chapter,files,_=context(c['id']);c.update(total_pages=len(files),results=[],status='pending')
         stop_event.clear();job.update(status='running',message='Preparing selected chapters…');save_job(job)
         active={'id':job['id'],'started':time.monotonic(),'job':job}
-        thread=threading.Thread(target=run,args=(job,),daemon=True);thread.start()
+        thread=threading.Thread(target=run,args=(job,),daemon=True)
+        try:thread.start()
+        except Exception as exc:
+            active=None; job['status']='failed'; errors.failure(job,exc,'preparation','Start panel preparation');errors.save_final(save_job,job,'preparation');raise
         return summary(job)
 
 
 def recover():
-    for path in (storage.DATA/'preparation/jobs').glob('*.json'):
-        job=storage.read_json(path)
+    for path,job in errors.recovery_records(storage.DATA/'preparation/jobs','preparation'):
         if job['status'] in ('running','stopping'):
             job.update(status='paused',message='Interrupted by shutdown. Resume to continue.');save_job(job)
 
@@ -291,7 +298,7 @@ def catalog_api():
 
 @router.get('/jobs')
 def jobs_api():
-    with lock:return [summary(storage.read_json(p)) for p in sorted((storage.DATA/'preparation/jobs').glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True)]
+    with lock:return list(reversed(errors.job_list(storage.DATA/'preparation/jobs','preparation',summary)))
 
 
 @router.post('/jobs')
