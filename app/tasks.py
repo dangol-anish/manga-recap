@@ -4,6 +4,11 @@ lock=threading.RLock()
 
 
 def ensure_idle():
+    from app import maintenance
+    if maintenance.recovery_required:
+        raise FileExistsError('An interrupted restore needs recovery. Open Backup & storage and check restore recovery before processing more chapters.')
+    if maintenance.active is not None:
+        raise FileExistsError('Backup, restore or cleanup is running. Wait or stop it before starting other work.')
     from app import grouped_audio
     if grouped_audio.active is not None:
         raise FileExistsError("Selected narration audio is being created. Finish or stop it first.")

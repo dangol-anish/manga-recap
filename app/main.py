@@ -95,7 +95,7 @@ async def lifespan(app):
                 job.update(status='paused', message='Interrupted by shutdown. Resume this chapter to continue.')
                 write_json(path, job)
         from importlib import import_module
-        modules = [import_module('app.' + name) for name in ('downloader','detection','panel_preparation','speech_stage6','video_stage7','batch_work','stitch','shorts','grouped_audio')]
+        modules = [import_module('app.' + name) for name in ('maintenance','downloader','detection','panel_preparation','speech_stage6','video_stage7','batch_work','stitch','shorts','grouped_audio')]
         try:
             for module in modules:
                 try: module.recover()
@@ -129,6 +129,12 @@ async def local_requests(request: Request, call_next):
     if origin and origin not in {f'http://{request.headers.get("host")}', f'https://{request.headers.get("host")}'}:
         return JSONResponse({'detail': 'Use this app from its local page.'}, status_code=403)
     try:
+        from app import maintenance
+        if request.method not in {'GET', 'HEAD', 'OPTIONS'} and not request.url.path.startswith('/api/storage/'):
+            if maintenance.recovery_required:
+                raise FileExistsError('Restore recovery needs attention. Open Backup & storage before changing saved work.')
+            if maintenance.active is not None:
+                raise FileExistsError('Backup, restore or cleanup is running. Wait or stop it before changing saved work.')
         if request.method == 'GET':
             from app.read_cache import read_snapshot
             with read_snapshot(): response = await call_next(request)
@@ -709,3 +715,14 @@ app.include_router(shorts_router)
 
 from app.grouped_audio import router as grouped_audio_router
 app.include_router(grouped_audio_router)
+from app.workflow import router as workflow_router
+app.include_router(workflow_router)
+
+
+@app.get('/storage')
+def storage_page():
+    return FileResponse(ROOT / 'app/static/storage.html')
+
+
+from app.maintenance import router as maintenance_router
+app.include_router(maintenance_router)

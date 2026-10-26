@@ -228,6 +228,7 @@ data/
 reports/
 .cache/
 vendor/
+backups/
 .env.*
 *.png
 *.jpg

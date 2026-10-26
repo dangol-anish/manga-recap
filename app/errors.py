@@ -13,10 +13,24 @@ import uuid
 
 from app import storage
 
+def request_error(exc):
+    """Keep current workflow endpoints' existing conflict/input status codes.
+
+    Detailed stage, recovery and saved-work messages are attached by the
+    installed error handlers. Historical Library endpoints retain their own
+    403/404 mapping for compatibility.
+    """
+    from fastapi import HTTPException
+
+    status = 409 if isinstance(exc, FileExistsError) else 400
+    return HTTPException(status_code=status, detail=str(exc))
+
+
 _lock = threading.RLock()
 _recent = OrderedDict()
 _warnings = OrderedDict()
 STAGES = {
+    'storage': 'Backup & storage',
     'downloader': 'Stage 1: Downloader', 'renumbering': 'Stage 2: Renumbering',
     'detection': 'Stage 3: Panel Detection', 'preparation': 'Stage 4: Panel Review',
     'story': 'Stage 5: Narration', 'speech': 'Stage 6: Audio', 'grouped-audio': 'Stage 6: Gemini Audio',
@@ -24,6 +38,7 @@ STAGES = {
     'memory': 'Story memory', 'library': 'Library', 'startup': 'App startup',
 }
 SAVED = {
+    'storage': 'Original manga and narration are never cleanup targets. Restore safety copies are retained; check the storage task result before retrying.',
     'downloader': 'Already verified downloads are retained; an unfinished page may need downloading again.',
     'renumbering': 'Some filenames may be in the saved renumbering transaction. Keep the folder and temporary files together; resume recovery instead of renaming them yourself.',
     'detection': 'Completed panel detections are retained. The failed page is not valid output.',

@@ -182,8 +182,7 @@ To recheck the local installation without touching chapters:
 For developer regression tests after setup (optional; Node 22 is needed only for JavaScript tests):
 
 ```powershell
-.\.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests -q
-Get-ChildItem tests\test_*.cjs | ForEach-Object { node $_.FullName; if ($LASTEXITCODE -ne 0) { throw "JavaScript test failed" } }
+.\.venv\Scripts\python.exe -X utf8 -m scripts.run_tests
 ```
 
 Tests use synthetic fixtures and mocked model/TTS responses. Some symlink fixtures skip if Windows does not grant symlink privilege; Developer Mode can enable those fixtures and is **not** required to use the app. The [Windows/macOS GitHub Actions workflow](https://github.com/dangol-anish/manga-recap/actions/workflows/compatibility.yml) runs these checks on every push; check the latest run for its native Windows result.
@@ -193,3 +192,5 @@ Tests use synthetic fixtures and mocked model/TTS responses. Some symlink fixtur
 The code changes, Windows API branches and real FFmpeg fixtures were checked on the development Mac. Windows x64/Python 3.11 dependency-wheel resolution was checked separately. **An actual Windows install, full Magi inference, online download and Edge TTS still need to pass on the target Windows laptop.** The setup script supplies those local prerequisite/model gates; it cannot guarantee another machine's hardware, permissions or external services before that machine runs them.
 
 Primary references: [PyTorch's pinned 2.6 installation commands](https://docs.pytorch.org/get-started/previous-versions/), [torchvision/Python compatibility](https://github.com/pytorch/vision#installation), [Python on Windows and long paths](https://docs.python.org/3.11/using/windows.html), [official Magi v3](https://huggingface.co/ragavsachdeva/magiv3), [FFmpeg command-line documentation](https://www.ffmpeg.org/ffmpeg.html).
+
+For the shared regression command, test prerequisites and code layout, see [Development guide](DEVELOPMENT.md). Updated daily controls are described in [Workflow](WORKFLOW.md).

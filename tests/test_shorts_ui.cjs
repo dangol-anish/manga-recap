@@ -3,6 +3,7 @@ class Element{
  constructor(tag='div',text=''){this.tag=tag;this.textContent=text;this.children=[];this.events={};this.value='';this.disabled=false;this.hidden=false;this.dataset={};this.attrs={};this.loads=0;}
  append(...nodes){this.children.push(...nodes);}prepend(...nodes){this.children.unshift(...nodes);}replaceChildren(...nodes){this.children=[...nodes];}addEventListener(name,fn){this.events[name]=fn;}
  setAttribute(k,v){this.attrs[k]=v;}getAttribute(k){return k==='src'?this._src:this.attrs[k];}scrollIntoView(){}select(){}showModal(){this.open=true;}close(){this.open=false;}
+ pause(){this.paused=true;}
  get firstChild(){return this.children[0];}set src(value){this._src=value;this.loads++;}get src(){return this._src;}
  querySelectorAll(selector){const match=node=>selector.startsWith('.')?node.className===selector.slice(1):selector.startsWith('textarea[')?node.tag==='textarea'&&String(node.dataset.index)===selector.match(/"(\d+)"/)[1]:node.tag===selector;return this.children.flatMap(c=>[...(match(c)?[c]:[]),...c.querySelectorAll(selector)]);}
  querySelector(s){return this.querySelectorAll(s)[0]||null;}
@@ -27,10 +28,13 @@ class Element{
  get('manga').value='m';get('manga').events.change();let choices=get('chapters').querySelectorAll('input');assert.equal(choices.length,2);assert.equal(choices[1].disabled,true);choices[0].checked=true;choices[0].events.change();assert.equal(get('make-package').disabled,false);
  await get('make-package').events.click();assert.equal(get('project').hidden,false);assert.equal(get('source-download').href,'/api/shorts/projects/p/package');assert(!calls.some(c=>c.url.endsWith('/create')));
  get('reply').value='{}';await get('import').events.click();const card=get('ideas').children[0];const box=card.querySelector('input');box.checked=true;box.events.change();assert.equal(get('create-selected').disabled,false);
+ const writesBefore=calls.filter(c=>c.options?.method).length;await card.querySelector('button').events.click();assert.equal(calls.filter(c=>c.options?.method).length,writesBefore,'Saving an unchanged script must not invalidate a finished result');
  card.querySelector('textarea').events.input();assert.equal(get('create-selected').disabled,true,'Unsaved script edits must block creation');await card.querySelector('button').events.click();assert.equal(get('create-selected').disabled,false);
  await get('create-selected').events.click();assert.equal(get('job').hidden,false);assert.equal(get('create-selected').disabled,true);
  project.shorts[0].ready=true;project.shorts[0].video_url='/actual.mp4?v=1';project.job.completed=['s'];await vm.runInContext('poll()',context);let player=get('ideas').children[0].querySelector('video');assert(player);const loads=player.loads;await vm.runInContext('poll()',context);assert.equal(player.loads,loads,'Polling must not reload the current MP4');
  await get('stop').events.click();assert.equal(get('stop').hidden,true);
+ const currentCard=get('ideas').children[0],editsBefore=calls.filter(c=>c.url.endsWith('/edit')).length;currentCard.querySelector('textarea').value='Unsaved local draft';currentCard.querySelector('textarea').events.input();assert.equal(player.paused,true);assert.equal(player.hidden,true,'Editing hides and pauses an older video');
+ currentCard.querySelectorAll('button').find(b=>b.textContent==='Discard unsaved edits').events.click();assert.equal(calls.filter(c=>c.url.endsWith('/edit')).length,editsBefore,'Discard does not write the saved script');assert.equal(get('ideas').children[0].querySelector('textarea').value,row.narration);
  const html=fs.readFileSync('app/static/shorts.html','utf8');assert(html.indexOf('controls.css')>html.indexOf('shorts.css'));assert.match(html,/href="\/shorts" aria-current="page"/);
  console.log('Shorts UI: explicit package/import/create, unavailable chapters, dirty script protection, progress, stop and stable native MP4 passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

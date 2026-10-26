@@ -85,9 +85,33 @@ def packet(mid,chapter,batch_id,backend=None):
           'confirmed_facts':confirmed,'uncertain_claims':uncertain,'recent_chapters':recent,'older_chapter_excerpts':older,'cast':selected_cast,
           'coverage':{'saved_batches':len(history),'facts_saved':len(facts),'facts_included':len(confirmed),'uncertainties_saved':len(uncertainties),'uncertainties_included':len(uncertain),'chapters_saved':len(chapter_rows),'older_chapters_included':len(older),'cast_saved':len(cast),'cast_included':len(selected_cast)},
           'instructions':'Use confirmed facts as prior context only. Uncertain claims override summaries and cast; neither import nor repetition verifies a claim. Older excerpts may be incomplete. Read current images for new events. This packet is sufficient to start a fresh AI chat.'}
-    for key in ('older_chapter_excerpts','confirmed_facts','cast','uncertain_claims','recent_chapters'):
+    if backend is not None and backend.__name__ == 'app.narration_stage5':
+        from app import story_memory
+        reviewed = story_memory.context(mid, history)
+        pins = [r for r in reviewed if r['pinned'] and not r['resolved']]
+        # All unresolved questions remain on disk; the packet prioritizes pins,
+        # then the oldest open questions, rather than only the latest summary.
+        threads = [r for r in reviewed if r['kind']=='thread' and not r['resolved'] and not r['pinned']]
+        verified = [r for r in reviewed if r['kind']=='fact' and r['verified'] and not r['pinned']]
+        resolved = [r for r in reviewed if r['kind']=='thread' and r['resolved']]
+        data.update(pinned_memory=pins, user_verified_facts=bounded(reversed(verified),1800),
+                    unresolved_threads=bounded(threads,2200), resolved_threads=bounded(reversed(resolved),1200))
+        data['continuity']['open_threads'] = [r['text'] for r in pins if r['kind']=='thread'] + [r['text'] for r in data['unresolved_threads']]
+        # Legacy field names are retained for compatibility, but model-supplied
+        # "confirmed" is explicitly distinguished from human verification.
+        for fact in data['confirmed_facts']:
+            fact['verification']='user_verified' if any(r['kind']=='fact' and r['verified'] and r['text']==fact['text'] and r['chapter']==fact['chapter'] and r['batch_id']==fact['batch_id'] for r in reviewed) else 'ai_claim'
+        data['coverage'].update(pinned_included=len(pins), verified_saved=len(verified)+sum(r['verified'] for r in pins),
+            unresolved_saved=len(threads)+sum(r['kind']=='thread' for r in pins),
+            unresolved_included=len(data['unresolved_threads'])+sum(r['kind']=='thread' for r in pins))
+        data['instructions'] += ' confirmed_facts is a legacy name: these are AI claims, NOT human-verified facts. Only verification=user_verified means the user checked it. Pinned memory must persist across chapters but pinning is not verification. User verification takes priority over AI uncertainty about that same fact; it does not verify other claims. Resolved threads override older summaries that still call them open. Do not invent resolutions or promote AI claims to verified facts. Use only the preceding sources in this packet.'
+    for key in ('older_chapter_excerpts','confirmed_facts','cast','uncertain_claims','recent_chapters','unresolved_threads','user_verified_facts','resolved_threads'):
+        if key not in data:continue
         while data[key] and len(json.dumps(data,ensure_ascii=False))>CONTEXT_LIMIT:data[key].pop()
     data['coverage'].update(facts_included=len(data['confirmed_facts']),cast_included=len(data['cast']),uncertainties_included=len(data['uncertain_claims']),older_chapters_included=len(data['older_chapter_excerpts']))
+    if 'unresolved_threads' in data:
+        data['coverage']['unresolved_included']=len(data['unresolved_threads'])+sum(r['kind']=='thread' for r in data['pinned_memory'])
+        data['continuity']['open_threads']=[r['text'] for r in data['pinned_memory'] if r['kind']=='thread']+[r['text'] for r in data['unresolved_threads']]
     assert len(json.dumps(data,ensure_ascii=False))<=CONTEXT_LIMIT
     return data
 

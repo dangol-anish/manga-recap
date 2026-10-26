@@ -6,10 +6,10 @@ import tempfile
 import threading
 import shutil
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import FileResponse, Response, JSONResponse
 from pydantic import BaseModel, Field
-from app import storage, panel_preparation as panels, detection, narration, memory
+from app import errors, storage, panel_preparation as panels, detection, narration, memory
 from app.read_cache import memoized_read
 
 router=APIRouter(prefix='/api/story')
@@ -159,7 +159,7 @@ class Reply(BaseModel):
     final_recap:bool=False
 
 
-def error(exc):return HTTPException(409 if isinstance(exc,FileExistsError) else 400,str(exc))
+error = errors.request_error
 
 
 @router.get('/catalog')
@@ -171,11 +171,110 @@ def catalog_api():
     return groups
 
 
+
+
+class MemoryReview(BaseModel):
+    revision: str = Field(min_length=64,max_length=64)
+    id: str = Field(min_length=64,max_length=64)
+    pinned: bool
+    verified: bool
+    resolved: bool
+
+
+@router.get('/{mid}/memory')
+def memory_review_status(mid:str):
+    from app import story_memory
+    try:
+        with lock,panels.lock:
+            if not any(m['id']==mid for m in detection.catalog()['manga']):raise ValueError('Manga not found. Choose it again in Narration.')
+            return JSONResponse(story_memory.overview(mid),headers={'Cache-Control':'no-store'})
+    except (ValueError,OSError) as exc:raise error(exc)
+
+
+@router.post('/{mid}/memory')
+def memory_review_save(mid:str,body:MemoryReview):
+    from app import story_memory
+    from app.tasks import lock as task_lock,ensure_idle
+    try:
+        with task_lock,lock,panels.lock:
+            ensure_idle()
+            if not any(m['id']==mid for m in detection.catalog()['manga']):raise ValueError('Manga not found. Choose it again in Narration.')
+            return story_memory.update(mid,body.revision,body.id,body.pinned,body.verified,body.resolved)
+    except (ValueError,OSError) as exc:raise error(exc)
+
+
 @router.get('/{mid}/{chapter}')
 def status_api(mid:str,chapter:str):
     try:
         with lock,panels.lock:return status(mid,chapter)
     except (ValueError,OSError) as exc:raise error(exc)
+
+
+def preview(mid, chapter, bid):
+    """Read current imported text and visual spans without changing saved work."""
+    from app.alignment import validate_map
+    current = status(mid, chapter)
+    batch = next((b for b in current['batches'] if b['id'] == bid), None)
+    if not batch or not batch['imported']:
+        raise FileExistsError('Import the current reply for this batch before reviewing its story. Outdated replies cannot be previewed.')
+    entry = load_state(mid)['chapters'][chapter]['batches'][bid]
+    info, _, _ = resolve(mid, chapter)
+    token = _digest([current['revision'], batch['fingerprint'], batch['context_token']])
+    page_records = {r['page_id']: r for r in batch['page_records']}
+    offset = sum(b['beat_count'] for b in current['batches'] if b['id'] < bid and b['imported'])
+    beats = []
+    for index, saved in enumerate(entry['beats']):
+        text = saved['narration']
+        anchors = []
+        if text.strip():
+            issues, anchors = validate_map({**saved, 'number': index+1},
+                                          {'beat': index+1, 'anchors': saved.get('anchors', [])})
+            if issues:
+                raise ValueError(f'Beat {offset+index+1}: saved phrase anchors need checking. ' + ' '.join(issues))
+        selected = []
+        for position, pid in enumerate(saved['panel_ids']):
+            page_id = pid.rsplit('-', 1)[0]
+            record = page_records.get(page_id)
+            if not record:
+                raise ValueError('A selected panel is missing from the current batch: ' + pid)
+            start = 0 if position == 0 else anchors[position]['char_start'] if anchors else 0
+            end = anchors[position+1]['char_start'] if anchors and position+1 < len(anchors) else len(text)
+            selected.append({'id': pid, 'page': record['page'], 'page_id': page_id,
+                             'revision': record['revision'], 'narration': text[start:end],
+                             'phrase': anchors[position]['phrase'] if anchors else ''})
+        beats.append({'number': offset+index+1, 'narration': text, 'unsure': saved.get('unsure', ''),
+                      'silent': not text.strip(), 'panels': selected})
+    return {'batch_id': bid, 'chapter': chapter, 'token': token, 'beats': beats,
+            'selected_panels': sum(len(b['panels']) for b in beats),
+            'skipped_panels': len(batch['panel_ids'])-sum(len(b['panels']) for b in beats)}
+
+
+@router.get('/{mid}/{chapter}/{bid}/preview')
+def preview_api(mid: str, chapter: str, bid: str):
+    try:
+        with lock, panels.lock:
+            return JSONResponse(preview(mid, chapter, bid), headers={'Cache-Control': 'no-store'})
+    except (ValueError, OSError) as exc:
+        raise error(exc)
+
+
+@router.get('/{mid}/{chapter}/{bid}/preview/{pid}')
+def preview_panel_api(mid: str, chapter: str, bid: str, pid: str, token: str):
+    try:
+        with lock, panels.lock:
+            current = preview(mid, chapter, bid)
+            if token != current['token']:
+                raise FileExistsError('Narration or panels changed. Refresh the story preview before checking these images.')
+            selected = next((p for b in current['beats'] for p in b['panels'] if p['id'] == pid), None)
+            if not selected:
+                raise ValueError('This panel is not selected in the saved narration batch.')
+            info, _, _ = resolve(mid, chapter)
+            target = panels.record_path(info, selected['page_id']).parent / selected['revision'] / 'crops' / (pid+'.png')
+            if target.is_symlink() or not target.is_file() or not target.resolve().is_relative_to(panels.root(info).resolve()):
+                raise ValueError('The saved panel crop is missing or unsafe. Check Stage 4 preparation.')
+            return FileResponse(target, media_type='image/png', headers={'Cache-Control': 'no-store'})
+    except (ValueError, OSError) as exc:
+        raise error(exc)
 
 
 @router.get('/{mid}/{chapter}/{bid}/prompt')

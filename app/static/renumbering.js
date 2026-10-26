@@ -22,7 +22,7 @@ function render(){
 }
 async function refresh(){if(busy)return;busy=true;invalidate();controls();message('Loading chapter folders…');try{
  chapters=await api('/chapters');selected=new Set([...selected].filter(id=>chapters.some(c=>c.id===id)));
- const filter=$('#manga-filter'),previous=filter.value;filter.replaceChildren();const all=node('option','All manga');all.value='';filter.append(all);
+ const filter=$('#manga-filter'),previous=filter.value||chapters.find(c=>c.id===new URLSearchParams(location.search).get('chapter_id'))?.manga||'';filter.replaceChildren();const all=node('option','All manga');all.value='';filter.append(all);
  for(const manga of [...new Set(chapters.map(c=>c.manga))]){const option=node('option',manga);option.value=manga;filter.append(option);}
  filter.value=[...filter.options].some(o=>o.value===previous)?previous:'';render();message('');
  }catch(error){message(error.message);}finally{busy=false;controls();}}

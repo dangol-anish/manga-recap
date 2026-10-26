@@ -12,7 +12,7 @@ class Element{
  const elements=new Map(),calls=[],copied=[];const get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
  const b={id:'batch-001',pages:['0000.png','0001.png'],panel_ids:['p0000-1','p0001-1'],fingerprint:'a'.repeat(64),context_token:'b'.repeat(64),ready:true,previous_context:{coverage:{saved_batches:0,cast_included:0,facts_included:0}}};
  const state={manga:'Sample',chapter:'Chapter 1',pages:2,panels:2,imported_beats:0,batches:[b],revision:'c'.repeat(64)};let valid=false;
- const context=vm.createContext({document:{querySelector:get,createElement:t=>new Element(t)},URL,URLSearchParams,location:{search:'?manga=sample&chapter=Chapter%201',href:'http://127.0.0.1:8000/story?manga=sample&chapter=Chapter%201'},history:{replaceState:()=>{}},navigator:{clipboard:{writeText:async text=>copied.push(text)}},fetch:async(url,options)=>{
+ const context=vm.createContext({addEventListener(){},document:{querySelector:get,createElement:t=>new Element(t)},URL,URLSearchParams,location:{search:'?manga=sample&chapter=Chapter%201',href:'http://127.0.0.1:8000/story?manga=sample&chapter=Chapter%201'},history:{replaceState:()=>{}},navigator:{clipboard:{writeText:async text=>copied.push(text)}},fetch:async(url,options)=>{
   calls.push({url,options});let value;let status=200;
   if(url.endsWith('/catalog'))value=[{id:'sample',name:'Sample',chapters:[{name:'Chapter 1',ready:true}]}];
   else if(url.includes('/prompt?'))return {ok:true,text:async()=> 'MASTER + EXACT IDS + SAVED CONTEXT + RECEIPT'};

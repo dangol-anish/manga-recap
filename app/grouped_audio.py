@@ -201,9 +201,11 @@ def classify(status, data, key=''):
     return AudioError('google_request_rejected', f'Google rejected this audio request (HTTP {status}). Check model availability and the saved script. Completed sections are saved. No automatic retry was made.')
 
 
-def gemini(text, target):
+def gemini(text, target, pronunciations=None):
+    from app.audio_quality import style
+    speech_style = style(STYLE, text, pronunciations or [])
     payload = {'model': MODEL, 'input': [{'type': 'user_input', 'content': [{'type': 'text', 'text': text,
-        'annotations': [{'type': 'speech_metadata', 'style': STYLE}]}]}], 'response_format': {'type': 'audio', 'mime_type': 'audio/wav'},
+        'annotations': [{'type': 'speech_metadata', 'style': speech_style}]}]}], 'response_format': {'type': 'audio', 'mime_type': 'audio/wav'},
         'generation_config': {'speech_config': [{'voice': VOICE}]}}
     tried = set()
     while True:
@@ -306,7 +308,9 @@ def record_section(job, section):
     file = base / ('section-' + str(section['number']) + '-' + uuid.uuid4().hex + '.wav')
     section['pending_file'] = file.name; section['pending_provider'] = job['engine']; save(job)
     storage.write_json(base / ('section-' + str(section['number']) + '-script.json'), {'text': section['text'], 'refs': section['refs']})
-    if job['engine'] == 'gemini': meta = gemini(section['text'], file)
+    if job['engine'] == 'gemini':
+        hints = job.get('pronunciations', [])
+        meta = gemini(section['text'], file, pronunciations=hints) if hints else gemini(section['text'], file)
     else:
         mp3 = file.with_suffix('.mp3')
         settings = dict(job.get('backup_pacing', LEGACY_BACKUP_PACING))
@@ -443,6 +447,10 @@ def run(job):
             metadata_file(job, section['recording'])
             prepare_speed(job, section)
             if cancel.is_set(): raise InterruptedError()
+            from app.audio_quality import analyze
+            section['quality'] = analyze(metadata_file(job, section['recording']), section['text'], section['timing'], section['recording'].get('speed', 1.))
+            section['quality']['audio_token'] = section['recording']['sha256']
+            save(job)
             if not section['timing']:
                 job.update(message='Recording saved. Loading the free local speech timing model (about 360 MB on first use)…'); save(job)
                 from app.forced_timing import Aligner
@@ -452,6 +460,9 @@ def run(job):
                     section['timing'] = aligner.align(metadata_file(job, section['recording']), section['text'], cancel, progress)
                 except InterruptedError: raise
                 except Exception as exc: raise AudioError('local_timing', 'The recording is saved, but local timing failed: ' + str(exc) + ' Resume retries timing without another Gemini request.') from None
+                save(job)
+                section['quality'] = analyze(metadata_file(job, section['recording']), section['text'], section['timing'], section['recording'].get('speed', 1.))
+                section['quality']['audio_token'] = section['recording']['sha256']
                 save(job)
             publish_chapters(job)
         if cancel.is_set(): raise InterruptedError()
@@ -489,17 +500,19 @@ def start(mid, chapters, confirmed=True):
         ensure_idle(); api_key()
         if not shutil.which('ffmpeg'): raise ValueError('Install FFmpeg first.')
         snapshot = source(mid, chapters)
+        from app.audio_quality import profile, matching
+        hints = matching('\n'.join(b['narration'] for c in snapshot['chapters'] for b in c['beats']), profile(mid)['items'])
         token = story._digest(snapshot)
         for filename in sorted(safe(storage.DATA / 'grouped-audio').glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True):
             previous = load(filename.stem)
-            if previous.get('source_token') == token and previous.get('engine') == 'gemini' and previous.get('model') == MODEL and previous.get('speed', 1.) == DEFAULT_SPEED:
+            if previous.get('source_token') == token and previous.get('engine') == 'gemini' and previous.get('model') == MODEL and previous.get('speed', 1.) == DEFAULT_SPEED and previous.get('pronunciations', []) == hints:
                 if previous['status'] in ('failed', 'paused'): return view(previous)
                 if previous['status'] == 'complete' and previous.get('full'):
                     metadata_file(previous, previous['full'])
                     for section in previous['sections']: metadata_file(previous, section['recording'])
                     return view(previous)
         job = {'id': uuid.uuid4().hex, 'created_at': time.time(), 'source': snapshot, 'source_token': token, 'sections': sections(snapshot),
-            'engine': 'gemini', 'model': MODEL, 'voice': VOICE, 'speed': DEFAULT_SPEED, 'backup_pacing': dict(audio.DEFAULT_PACING), 'full': None, 'status': 'waiting', 'error': None, 'message': 'Starting selected narration…'}
+            'engine': 'gemini', 'model': MODEL, 'voice': VOICE, 'speed': DEFAULT_SPEED, 'pronunciations': hints, 'backup_pacing': dict(audio.DEFAULT_PACING), 'full': None, 'status': 'waiting', 'error': None, 'message': 'Starting selected narration…'}
         return launch(job)
 
 
@@ -535,12 +548,15 @@ def shutdown():
 
 
 def view(job):
+    from app.audio_quality import edges
     result = {k: copy.deepcopy(job.get(k)) for k in ('id', 'created_at', 'status', 'message', 'engine', 'error', 'current_section')}
-    result.update(speed=job.get('speed', 1.), manga=job['source']['manga'], chapters=[c['chapter'] for c in job['source']['chapters']], busy=active is not None, full=bool(job.get('full')),
+    result.update(speed=job.get('speed', 1.), pronunciation_count=len(job.get('pronunciations', [])), manga=job['source']['manga'], chapters=[c['chapter'] for c in job['source']['chapters']], busy=active is not None, full=bool(job.get('full')),
                   total_sections=len(job['sections']), completed=sum(bool(s['timing']) for s in job['sections']),
                   sections=[{'number': s['number'], 'words': s['words'], 'chapters': list(dict.fromkeys(r['chapter'] for r in s['refs'])),
                              'recorded': bool(s['recording']), 'timed': bool(s['timing']), 'provider': s['recording']['provider'] if s['recording'] else None, 'key_label': s['recording'].get('key_label') if s['recording'] else None,
-                             'duration': s['recording']['duration'] if s['recording'] else None} for s in job['sections']])
+                             'duration': s['recording']['duration'] if s['recording'] else None,
+                             'audio_token': s['recording']['sha256'] if s['recording'] else None,
+                             'quality': s.get('quality'), **edges(s['text'])} for s in job['sections']])
     return result
 
 
@@ -563,6 +579,44 @@ class Selection(BaseModel):
     manga_id: str = Field(min_length=1, max_length=128)
     chapters: list[str] = Field(min_length=1, max_length=500)
     free_tier_confirmed: bool = True
+
+
+class PronunciationProfile(BaseModel):
+    revision: str = Field(min_length=64, max_length=64)
+    items: list[dict[str, str]] = Field(max_length=50)
+
+
+@router.get('/pronunciation/{mid}')
+@endpoint
+def pronunciation_api(mid: str):
+    from app.audio_quality import profile
+    return profile(mid)
+
+
+@router.post('/pronunciation/{mid}')
+@endpoint
+def save_pronunciation_api(mid: str, body: PronunciationProfile):
+    from app.audio_quality import save_profile
+    return save_profile(mid, body.revision, body.items)
+
+
+@router.get('/jobs/{ident}/quality/{number}')
+@endpoint
+def quality_api(ident: str, number: int, token: str | None = None):
+    from app.tasks import lock as task_lock, ensure_idle
+    with task_lock, lock:
+        ensure_idle()
+        from app.audio_quality import analyze
+        job=load(ident); fresh(job)
+        if not 1<=number<=len(job['sections']):raise ValueError('Choose an existing audio section to check.')
+        section=job['sections'][number-1]
+        if not section['recording']:raise ValueError('This section has not been recorded yet. No speech was requested by this check.')
+        if token is not None and token!=section['recording']['sha256']:raise FileExistsError('The saved section changed. Reload its controls before checking.')
+        recording=metadata_file(job,section['recording'])
+        report=analyze(recording,section['text'],section['timing'],section['recording'].get('speed',1.))
+        metadata_file(job,section['recording'])
+        report['audio_token']=section['recording']['sha256']
+        return report
 
 
 @router.get('/keys')
@@ -595,7 +649,7 @@ def action_api(ident: str, action: str):
 
 @router.get('/jobs/{ident}/audio')
 @endpoint
-def audio_api(ident: str, section: int | None = None, download: bool = False):
+def audio_api(ident: str, section: int | None = None, download: bool = False, token: str | None = None):
     job = load(ident); fresh(job)
     if section is None:
         if not job.get('full'): raise ValueError('Finish all selected sections first.')
@@ -604,5 +658,7 @@ def audio_api(ident: str, section: int | None = None, download: bool = False):
         if not 1 <= section <= len(job['sections']): raise ValueError('Section not found.')
         metadata = job['sections'][section - 1]['recording']; mime = 'audio/wav'
         if not metadata: raise ValueError('This section has not returned yet.')
+    if token is not None and token!=metadata['sha256']:
+        raise FileExistsError('This recording changed. Reload the saved sections before listening again.')
     file = metadata_file(job, metadata)
     return FileResponse(file, media_type=mime, filename='Selected-chapters-Audio.mp3' if download and section is None else None)

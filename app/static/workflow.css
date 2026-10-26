@@ -1,0 +1,23 @@
+.chapter-progress {margin:0 0 28px;border:1px solid #fffafb1a;border-radius:14px;background:linear-gradient(135deg,#2b2c287d,#131515b3);color:#fffafb;box-shadow:inset 0 1px #fffafb08;}
+.chapter-progress>summary {padding:16px 20px;cursor:pointer;color:#7de2d1;font-size:14px;}
+.workflow-body {padding:0 20px 20px;}
+.workflow-pickers {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;gap:16px;}
+.workflow-pickers>div {min-width:0;}
+.workflow-pickers label {display:block;margin:0 0 8px;color:#fffafbb3;font-size:13px;}
+.workflow-pickers select {width:100%;min-width:0;min-height:44px;}
+.workflow-pickers button {min-height:44px;}
+.workflow-message {color:#fffafbb3;font-size:13px;line-height:1.6;}
+.workflow-next {display:flex;align-items:center;justify-content:space-between;gap:20px;margin:20px 0;padding:16px;background:#7de2d10a;border:1px solid #7de2d133;border-radius:10px;}
+.workflow-next p {margin:6px 0 0;color:#fffafbb3;font-size:13px;line-height:1.6;overflow-wrap:anywhere;}
+.workflow-link {flex-shrink:0;color:#7de2d1;text-decoration:none;font-size:14px;}
+.workflow-link:hover {text-decoration:underline;}
+.workflow-steps {list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px;}
+.workflow-steps li {display:grid;grid-template-columns:1fr auto;gap:8px;padding:14px 0;border-bottom:1px solid #fffafb10;min-width:0;}
+.workflow-steps a {color:#fffafb;text-decoration:none;font-size:14px;}
+.workflow-steps a:hover {text-decoration:underline;}
+.workflow-steps p {grid-column:1/-1;margin:0;color:#fffafb99;font-size:12px;line-height:1.6;overflow-wrap:anywhere;}
+.workflow-state {color:#fffafb99;font-size:12px;}
+.workflow-steps [data-state=ready] .workflow-state,.workflow-steps [data-state=next] .workflow-state {color:#7de2d1;}
+.chapter-progress :focus-visible {outline:2px solid #7de2d1;outline-offset:3px;}
+@media(max-width:1000px){.workflow-pickers{grid-template-columns:repeat(2,minmax(0,1fr));}.workflow-pickers button{grid-column:1/-1;justify-self:end;}}
+@media(max-width:560px){.workflow-pickers,.workflow-steps{grid-template-columns:1fr;}.workflow-next{align-items:flex-start;flex-direction:column;}.workflow-body{padding:0 16px 16px;}}

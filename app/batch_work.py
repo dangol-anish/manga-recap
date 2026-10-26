@@ -4,7 +4,7 @@ import copy
 import threading
 import time
 import uuid
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from app import storage
 
@@ -180,7 +180,7 @@ class Selection(BaseModel):
     chapters: list[str] = Field(min_length=1, max_length=500)
 
 
-def error(exc): return HTTPException(409 if isinstance(exc, FileExistsError) else 400, str(exc))
+error = errors.request_error
 
 
 @router.get('/{kind}')

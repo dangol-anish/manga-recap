@@ -40,11 +40,5 @@ jobs:
       - name: Install verified model helper source only (no weights or inference)
         run: python -m scripts.install_model --source-only
       - run: python -m scripts.doctor --media
-      - run: python -m unittest discover -s tests -q
-      - name: JavaScript control tests
-        shell: pwsh
-        run: |
-          Get-ChildItem tests/test_*.cjs | ForEach-Object {
-            node $_.FullName
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+      - name: Python and JavaScript regression tests
+        run: python -m scripts.run_tests

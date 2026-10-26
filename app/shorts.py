@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from app import storage, narration_stage5 as story, panel_preparation as panels, audio, alignment, video
@@ -134,9 +134,19 @@ def create(mid, chapters, name):
         return public(project)
 
 
+def source_identity(source):
+    value=copy.deepcopy(source)
+    for chapter in value['chapters']:
+        # Prompt presentation and user review overlays may evolve without
+        # changing accepted scripts. The lineage token still binds preceding
+        # imported story dependencies; direct script/crop hashes remain intact.
+        chapter['context_before']={'token':chapter.get('context_before',{}).get('token')}
+    return story._digest(value)
+
+
 def fresh(project):
     source = snapshot(project['source']['manga_id'], [c['chapter'] for c in project['source']['chapters']])
-    if story._digest(source) != project['source_token']:
+    if story._digest(project['source']) != project['source_token'] or source_identity(source) != source_identity(project['source']):
         raise FileExistsError('Selected narration or panels changed. Create a new Shorts package; this project and its files are retained.')
 
 
@@ -461,7 +471,7 @@ class Edit(BaseModel):
     segments: list[dict] = Field(min_length=1, max_length=80)
 
 
-def error(exc): return HTTPException(409 if isinstance(exc, FileExistsError) else 400, str(exc))
+error = errors.request_error
 
 
 # Endpoints use one wrapper so malformed inputs cannot expose tracebacks.
@@ -553,3 +563,13 @@ def video_api(pid: str, sid: str, download: bool = False):
         project = load(pid); fresh(project); path = result_path(project, find_short(project, sid))
         return FileResponse(path, media_type='video/mp4', filename='Short-' + sid[:8] + '.mp4' if download else None)
     return guarded(video_file)
+
+
+@router.get('/projects/{pid}/shorts/{sid}/review')
+def review_api(pid:str,sid:str):
+    def inspect():
+        from app.shorts_review import review
+        with lock:
+            project=load(pid)
+            return JSONResponse(review(project,find_short(project,sid)),headers={'Cache-Control':'no-store'})
+    return guarded(inspect)

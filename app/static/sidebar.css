@@ -79,3 +79,6 @@
   .stage-sidebar {background: var(--sidebar-onyx); -webkit-backdrop-filter: none; backdrop-filter: none;}
   .stage-item[aria-current="page"] {background: var(--sidebar-graphite);}
 }
+
+.stage-sidebar .storage-nav{margin-top:20px;border-top:1px solid #fffafb14}.stage-sidebar .storage-nav .stage-name{font-size:12px;color:#fffafbb3}
+.stage-sidebar{overflow-y:auto}

@@ -22,7 +22,7 @@ Maximum 40 narration words per selected panel per beat; this is a limit, not a t
 KEEP FACTS NARROW
 Use names only when current pages or supplied confirmed cast establish them. Do not infer jobs, ranks, relationships or identities from appearance; keep gender/age/family roles consistent. Unknown characters can have name "" and a neutral supported role.
 Preserve the source's qualifiers, attribution and scope in EVERY field. "Nearly impossible" cannot become "permanent." One worker's pay cannot establish a society-wide rule. An order does not prove its motive; a character's suspicion does not prove another person's intention. Do not strengthen a claim in a summary after keeping it qualified in narration.
-Prior context is the only available history and may be incomplete. Do not retell it as new action. Uncertain claims remain uncertain and override conflicting summaries/cast.
+Prior context is the only available history and may be incomplete. Do not retell it as new action. Uncertain claims remain uncertain and override conflicting AI summaries/cast. Only verification=user_verified marks a fact checked by the user; an AI status of confirmed is still an AI claim. Pinning preserves context but does not verify it. Keep supplied unresolved_threads open unless current images establish the answer; resolved_threads override older summaries. Do not invent a resolution.
 
 SAVE CONTEXT WITHOUT INVENTING IT
 Return cast, continuity {summary, open_threads}, chapter_summary (this chapter so far, at most 1200 characters), and memory (at most 30 items). Open threads are established unresolved matters, not invented predictions.

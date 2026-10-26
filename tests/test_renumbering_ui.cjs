@@ -11,7 +11,7 @@ class Element{
  const elements=new Map(),calls=[];const get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
  const chapter={id:'chapter-a',folder:'manga/Sample/Chapter 1',name:'Chapter 1',manga:'Sample',images:2,pending:false};
  const plan={id:'plan-a',status:'preview',chapters:[{...chapter,changes:2,mapping:[{from:'2.jpg',to:'0000.jpg'},{from:'9.png',to:'0001.png'}]}]};
- const context=vm.createContext({document:{querySelector:get,createElement:tag=>new Element(tag),createTextNode:text=>{const n=new Element('text');n.textContent=text;return n;}},fetch:async(url,options)=>{calls.push({url,body:options?.body});return {ok:true,json:async()=>url.endsWith('/chapters')?[chapter]:url.endsWith('/open')?{opened:true}:{...plan,status:'complete',results:[{folder:chapter.folder,status:'complete',images:2,renamed:2}]}};}});
+ const context=vm.createContext({URLSearchParams,location:{search:""},document:{querySelector:get,createElement:tag=>new Element(tag),createTextNode:text=>{const n=new Element('text');n.textContent=text;return n;}},fetch:async(url,options)=>{calls.push({url,body:options?.body});return {ok:true,json:async()=>url.endsWith('/chapters')?[chapter]:url.endsWith('/open')?{opened:true}:{...plan,status:'complete',results:[{folder:chapter.folder,status:'complete',images:2,renamed:2}]}};}});
  vm.runInContext(fs.readFileSync('app/static/renumbering.js','utf8'),context);
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(get('#apply-numbering').disabled,true,'No selection must disable renumbering');

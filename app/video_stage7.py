@@ -10,7 +10,7 @@ from urllib.parse import quote,urlencode
 import uuid
 import wave
 
-from fastapi import APIRouter,HTTPException
+from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from pydantic import BaseModel,Field
 from app import storage,video,speech_stage6 as speech,narration_stage5 as story,panel_preparation as panels
@@ -209,7 +209,7 @@ class Timing(BaseModel):
 class Export(BaseModel):
     render_token:str=Field(min_length=64,max_length=64)
 
-def error(exc):return HTTPException(409 if isinstance(exc,FileExistsError) else 400,str(exc))
+error = errors.request_error
 
 
 @router.post('/open-root-folder')

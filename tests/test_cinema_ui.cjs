@@ -25,7 +25,7 @@ class Element{
  await get('#open-video-root').events.click();assert(calls.some(c=>c.url==='/api/cinema/open-root-folder'&&c.options?.method==='POST'));assert.equal(get('#open-video-root').disabled,false);calls.length=0;
  assert.equal(get('#chapter-select').disabled,true);get('#manga-select').value='sample';await get('#manga-select').events.change();assert.equal(get('#chapter-select').disabled,false,'Choosing a manga must enable its chapter dropdown');get('#chapter-select').value='Chapter 1';await get('#chapter-select').events.change();
 
- const player=get('#preview');assert.equal(calls.filter(c=>c.options?.method).length,0,'Opening Video must not export or synthesize');assert.equal(player.hidden,true);assert.equal(get('#build-preview').disabled,false);assert.equal(get('#progress').value,0,'A deleted video must not show completed render progress');assert(!get('#job').textContent.includes('MP4 ready'));
+ const player=get('#preview');assert.equal(calls.filter(c=>c.options?.method).length,0,'Opening Video must not export or synthesize');assert.equal(player.hidden,true);assert.equal(get('#build-preview').disabled,false);assert(get('#timings').querySelectorAll('button').filter(b=>b.dataset.playback==='true').every(b=>b.disabled),'Cut playback requires a finished MP4');assert.equal(get('#progress').value,0,'A deleted video must not show completed render progress');assert(!get('#job').textContent.includes('MP4 ready'));
  await get('#build-preview').events.click();assert.equal(get('#progress').value,.2);assert.equal(get('#build-preview').disabled,true);
  server.ready=true;server.busy=false;server.job={status:'complete',render_token:server.render_token,progress:1,message:'MP4 ready.'};await vm.runInContext('refresh()',context);
  assert.equal(player.hidden,false);assert.match(player.src,/\/mp4\?token=/);assert.equal(get('#preview-empty').hidden,true);
@@ -33,6 +33,25 @@ class Element{
  for(const [time,panel,beat] of [[.7,'p0000-2','1'],[2.2,'p0001-1','2'],[.1,'p0000-1','1'],[2.7,'p0001-1','2'],[1.2,'p0000-2','1']]){player.currentTime=time;player.events.seeked();assert.equal(player.currentTime,time,'Seeking must never be rewritten by panel UI');assert.equal(get('#beat').value,beat);assert.match(get('#panel-label').textContent,new RegExp(panel));}
  await vm.runInContext('refresh()',context);assert.equal(player.currentTime,1.2);assert.equal(player.loads,loads,'Polling must not reload the same MP4');assert.equal(player.paused,false,'Polling must not pause playback');
  get('#beat').value='1';get('#beat').events.change();assert.equal(player.currentTime,0);
+ // Cut review uses the real MP4; no writes or exports, including on polling.
+ const rowButtons=()=>get('#timings').querySelectorAll('button');
+ const byText=(text,last=false)=>{const buttons=rowButtons().filter(b=>b.textContent===text);return last?buttons.at(-1):buttons[0];};
+ const beforeReviewPosts=calls.filter(c=>c.options?.method).length;
+ await byText('Jump to panel',true).events.click();assert.equal(player.currentTime,14/24);assert.equal(player.paused,true);
+ await byText('Watch switch',true).events.click();assert.equal(player.paused,false);assert.equal(player.currentTime,0);
+ await vm.runInContext('refresh()',context);assert.equal(player.paused,false,'Polling does not stop a switch review');
+ player.currentTime=1.9;player.events.timeupdate();assert.equal(player.paused,true);assert.equal(player.currentTime,14/24+1.25);
+ assert.equal(calls.filter(c=>c.options?.method).length,beforeReviewPosts,'Review must never save or create video');
+ byText('+1 frame').events.click();
+ assert(Math.abs(Number(get('#timings').querySelectorAll('input')[0].value)-(.6+1/24))<.000001);
+ assert.equal(get('#discard-timing').disabled,false);assert.equal(byText('Watch switch').disabled,true,'Draft timing cannot pretend to be the current MP4');
+ get('#discard-timing').events.click();assert.equal(Number(get('#timings').querySelectorAll('input')[0].value),.6);assert.equal(player.hidden,false);
+ assert.equal(calls.filter(c=>c.options?.method).length,beforeReviewPosts,'Discard only restores the local draft');
+ player.currentTime=0;byText('Use video position').events.click();assert.equal(get('#discard-timing').disabled,true,'Invalid first-frame switch is rejected without changing the draft');assert.match(get('#notice').textContent,/one frame/);
+ player.currentTime=.75;byText('Use video position').events.click();assert.equal(Number(get('#timings').querySelectorAll('input')[0].value),.75);
+ get('#discard-timing').events.click();
+ assert.match(get('#checks-count').textContent,/1 to review/,'A 0.6 second hold is a review suggestion');
+ get('#timing-checks').querySelectorAll('button')[0].events.click();assert.equal(get('#beat').value,'1');
  const input=get('#timings').querySelectorAll('input')[0];input.value='.9';input.events.input();assert.equal(player.hidden,true);assert.equal(player.src,undefined);assert.equal(get('#export').disabled,true);assert.equal(get('#save').disabled,false);assert.equal(get('#manga-select').disabled,true);
  await get('#save').events.click();const saved=JSON.parse(calls.find(c=>c.url.endsWith('/timing')).options.body);assert.deepEqual(saved.switches,[.9]);assert.equal(saved.number,1);assert.equal(get('#build-preview').disabled,false);assert.equal(get('#play').disabled,true,'Old MP4 cannot be played as current timing');
  await get('#build-preview').events.click();server.ready=true;server.busy=false;server.job={status:'complete',render_token:server.render_token,progress:1,message:'MP4 ready.'};await vm.runInContext('refresh()',context);assert.equal(player.hidden,false);assert.match(get('#download').href,/download=true/);

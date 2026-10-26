@@ -10,7 +10,7 @@ class Element{
  const elements=new Map(),calls=[],review=[];const get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
  const chapter={id:'chapter-a',name:'Chapter 1',folder:'manga/Sample/Chapter 1',images:2,ready:true,prepared_pages:0};let jobs=[];
  const job={id:'job-a',status:'running',message:'Preparing',total_pages:2,completed_pages:0,prepared_pages:0,flagged_pages:0,panels:0,elapsed_seconds:0,chapters:[{id:'chapter-a',name:'Chapter 1',manga:'Sample',total_pages:2,results:[]}]};
- const context=vm.createContext({window:{PanelReview:{setBusy:()=>{},loadChapter:async id=>review.push(id),refresh:async()=>{}}},document:{querySelector:get,createElement:tag=>new Element(tag)},localStorage:{getItem:()=>'',setItem:()=>{}},setTimeout:()=>{},fetch:async(url,options)=>{
+ const context=vm.createContext({URLSearchParams,location:{search:""},window:{PanelReview:{setBusy:()=>{},loadChapter:async id=>review.push(id),refresh:async()=>{}}},document:{querySelector:get,createElement:tag=>new Element(tag)},localStorage:{getItem:()=>'',setItem:()=>{}},setTimeout:()=>{},fetch:async(url,options)=>{
   calls.push({url,body:options?.body});let value;
   if(url.endsWith('/catalog'))value=[{id:'manga-a',name:'Sample',chapters:[chapter]}];
   else if(url.endsWith('/open-folder'))value={opened:true};

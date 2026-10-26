@@ -13,7 +13,7 @@ class Element{
  const chapter={id:'chapter-1',name:'Chapter 1',folder:'manga/Sample/Chapter 1',images:1,pending:false};
  let jobs=[];
  const job={id:'job-1',status:'running',direction:'ltr',message:'Detecting',total_pages:1,completed_pages:0,completed_chapters:0,valid_pages:0,flagged_pages:0,panels_found:0,average_seconds_per_page:0,elapsed_seconds:0,chapters:[{...chapter,manga:'Sample',status:'running',pages:['0000.png'],results:[],elapsed_seconds:0}]};
- const context=vm.createContext({document:{querySelector:get,createElement:tag=>new Element(tag),createTextNode:text=>{const n=new Element('text');n.textContent=text;return n;}},localStorage:{getItem:()=>'',setItem:()=>{}},setTimeout:()=>{},fetch:async(url,options)=>{
+ const context=vm.createContext({URLSearchParams,location:{search:""},document:{querySelector:get,createElement:tag=>new Element(tag),createTextNode:text=>{const n=new Element('text');n.textContent=text;return n;}},localStorage:{getItem:()=>'',setItem:()=>{}},setTimeout:()=>{},fetch:async(url,options)=>{
   calls.push({url,body:options?.body});let value;
   if(url.endsWith('/catalog'))value={manga:[{id:'manga-1',name:'Sample',direction:'rtl',chapters:[chapter]},{id:'manga-2',name:'Other',direction:'rtl',chapters:[other]}],detector:{ready:true,message:'Magi ready',revision:'abc123456789'}};
   else if(url.endsWith('/open-folder'))value={opened:true};
