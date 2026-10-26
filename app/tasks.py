@@ -4,6 +4,12 @@ lock=threading.RLock()
 
 
 def ensure_idle():
+    from app import grouped_audio
+    if grouped_audio.active is not None:
+        raise FileExistsError("Selected narration audio is being created. Finish or stop it first.")
+    from app import shorts
+    if shorts.active is not None:
+        raise FileExistsError("Shorts are being created. Finish or stop them before starting another task.")
     from app import stitch
     if stitch.active is not None:
         raise FileExistsError('Videos are being combined. Wait or stop Stitch before starting another task.')

@@ -75,7 +75,9 @@ def sync(mid=None, chapter=None):
             for item in manga['chapters']:
                 name=item['name']
                 if chapter and name!=chapter:continue
-                original=storage.OUTPUTS/manga['id']/name/'narration/audio-stage6'
+                from app.grouped_audio import chapter_state
+                overlay=chapter_state(manga['id'],name)
+                original=storage.ROOT/overlay['folder'] if overlay else storage.OUTPUTS/manga['id']/name/'narration/audio-stage6'
                 if original.is_symlink() or not original.resolve().is_relative_to(storage.OUTPUTS.resolve()) or not original.is_dir():continue
                 full_path=original/'chapter.json'
                 full=storage.read_json(full_path,{}) if not full_path.is_symlink() else {}

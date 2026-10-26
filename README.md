@@ -140,9 +140,9 @@ Successful imports persist beats, cast, continuity, chapter summaries and cited 
 
 ## Stage 6 Audio
 
-Open **Stage 6: Audio**, or **Continue to Audio** after importing all Stage 5 batches. Select a fully narrated chapter and press **Generate missing audio**. New chapters default to Brian Multilingual at 1.0× with measured 180 ms period pauses; chapters with existing audio retain their saved voice and pacing; narration text goes to Microsoft's online speech service and requires internet. The script is unchanged. FFmpeg must be installed and available on PATH.
+Open **Stage 6: Audio**, choose a manga and multiple narrated chapters, then press **Create selected audio**. Gemini Charon creates balanced sections across chapter boundaries, followed by one full selected track. Recordings are checkpointed before free local phrase timing; quota and connection errors explain what happened and how to resume. Brian is an explicit backup. Existing chapter work is retained. See [Gemini audio setup and workflow](docs/GEMINI_AUDIO.md).
 
-Listen to individual beats or the complete chapter, and regenerate any spoken beat. Generation runs sequentially. Stop waits for the current clip; Resume retries unfinished clips, and restarting the app leaves interrupted jobs paused. A failed generation preserves completed clips and the previous version of a regenerated beat. Silent beats have no audio. Changes to narration, selected panels, phrase anchors or source context invalidate affected clips; the app never serves stale audio as current.
+The expandable chapter playback and Brian backup section retains the previous workflow for chapters without a grouped recording. Listen to individual beats or the complete chapter, and regenerate a spoken Brian beat. Generation runs sequentially. Stop waits for the current clip; Resume retries unfinished clips, and restarting the app leaves interrupted jobs paused. A failed generation preserves completed clips and the previous version of a regenerated beat. Silent beats have no audio. Changes to narration, selected panels, phrase anchors or source context invalidate affected clips; the app never serves stale audio as current.
 
 New audio, adjusted real word timestamps, phrase switch timestamps and prior clip revisions live under `outputs/<manga-id>/<chapter>/narration/audio-stage6/`. Jobs live under `data/speech/jobs/`; both are ignored by Git. Historical narration and media are separate. Opening the page never calls TTS or generates a video.
 
@@ -169,3 +169,7 @@ On **Panel Detection**, choose a manga, check chapters and set its reading direc
 Open **Stitch**, choose a manga, check at least two finished chapter videos, then press **Combine videos**. The listed filenames show exactly which saved versions will be joined. They play in natural chapter order. Progress appears directly below the button. Watch the finished MP4, use **Save video to computer**, or **Open folder**. The result is saved as `Combined video.mp4` alongside the manga's chapter videos; later versions receive numbered suffixes.
 
 Stitch uses free local FFmpeg stream copying, preserving the pictures and audio without another encode. Selected videos must have matching video and audio settings. Stop or app shutdown retains the original chapters; **Try again** restarts an interrupted join after checking its sources. Nothing starts automatically on reopening the page. Stitch never generates narration, speech or chapter videos. Job records live under ignored `data/stitch/jobs/`.
+
+## Experimental Shorts
+
+On `codex/shorts-workflow`, open **Shorts** in the sidebar to package narration across selected chapters for Gemini, import short proposals, and create separate vertical MP4s. See [the Shorts guide](docs/SHORTS.md). Chapter work stays unchanged.

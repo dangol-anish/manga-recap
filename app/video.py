@@ -64,13 +64,14 @@ def motion_plan(state):
     return result
 
 
-def motion_filter(plan):
+def motion_filter(plan, *, width=WIDTH, height=HEIGHT, fps=FPS):
     """Repeat stills, then sample a fractional affine camera at each frame.
 
     Moving zoompan crop coordinates round to pixels (and chroma blocks), which
     makes gentle movement stall and even reverse. Identity repetition avoids
     that crop; perspective performs the actual subpixel sampling.
     """
+    WIDTH, HEIGHT, FPS = width, height, fps
     def choose(values, variable, boundaries):
         def tree(lo, hi):
             if hi-lo == 1:return values[lo]

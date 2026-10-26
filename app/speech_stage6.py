@@ -25,6 +25,9 @@ stop_event=threading.Event()
 
 
 def root(mid,chapter):
+    from app.grouped_audio import chapter_state, safe
+    overlay=chapter_state(mid,chapter)
+    if overlay:return safe(storage.ROOT/overlay['folder'])
     path=story.root(mid,chapter)/'audio-stage6'
     if path.is_symlink():raise ValueError('Unsafe audio folder.')
     return path
@@ -36,6 +39,9 @@ def checksum(path):
 
 
 def source(mid,chapter):
+    from app.grouped_audio import chapter_state
+    overlay=chapter_state(mid,chapter)
+    if overlay:return overlay['source']
     with story.lock,panels.lock:
         status=story.status(mid,chapter)
         if not status['batches'] or not all(b['imported'] for b in status['batches']):
@@ -51,6 +57,9 @@ def source(mid,chapter):
 
 
 def manifest(mid,chapter):
+    from app.grouped_audio import chapter_state
+    overlay=chapter_state(mid,chapter)
+    if overlay:return overlay['manifest']
     path=root(mid,chapter)/'manifest.json'
     if path.is_symlink():raise ValueError('Unsafe audio manifest.')
     return storage.read_json(path,{'clips':{}})
@@ -131,6 +140,8 @@ def status(mid,chapter):
         job=next((j for j in jobs() if j['manga_id']==mid and j['chapter']==chapter),None)
         current.update(ready=sum(b['ready'] for b in current['beats']),spoken=sum(not b['silent'] for b in current['beats']),
                        duration=sum(b['duration'] or 0 for b in current['beats']),job=job,busy=active is not None)
+    from app.grouped_audio import chapter_state
+    current['grouped']=bool(chapter_state(mid,chapter))
     current['full']=full_status(mid,chapter,current)
     return current
 
@@ -260,6 +271,8 @@ def start(mid,chapter,revision,number=None,resume=None):
     from app.tasks import lock as task_lock,ensure_idle
     with task_lock,lock:
         ensure_idle()
+        from app.grouped_audio import chapter_state
+        if chapter_state(mid,chapter):raise ValueError('This chapter uses a grouped recording. Create or resume the Gemini selection above; individual Edge regeneration would change its voice and timing.')
         current=status(mid,chapter)
         if current['revision']!=revision:raise FileExistsError('Narration changed. Refresh before generating audio.')
         if not shutil.which('ffmpeg'):raise ValueError('Install free FFmpeg and restart the app before generating audio.')
@@ -276,7 +289,7 @@ def start(mid,chapter,revision,number=None,resume=None):
             if not chosen:raise ValueError('No missing spoken beats. Silent beats do not need audio; regenerate a spoken beat individually if needed.')
             job={'id':uuid.uuid4().hex,'manga_id':mid,'chapter':chapter,'source_revision':revision,'numbers':chosen,'completed_numbers':[],
                  'regenerate':number is not None,'created_at':time.time(),'elapsed_seconds':0}
-        job.update(status='running',message='Starting Andrew speech…');save_job(job)
+        job.update(status='running',message='Starting saved chapter voice…');save_job(job)
         stop_event.clear();active=job
         worker=threading.Thread(target=run,args=(job,),daemon=True)
         try:worker.start()

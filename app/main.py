@@ -98,8 +98,14 @@ async def lifespan(app):
         batch_work.recover()
         from app import stitch
         stitch.recover()
+        from app import shorts
+        shorts.recover()
+        from app import grouped_audio
+        grouped_audio.recover()
         yield
     finally:
+        grouped_audio.shutdown()
+        shorts.shutdown()
         stitch.shutdown()
         batch_work.shutdown()
         video_stage7.shutdown()
@@ -688,3 +694,15 @@ def stitch_page():
 
 from app.stitch import router as stitch_router
 app.include_router(stitch_router)
+
+
+@app.get('/shorts')
+def shorts_page():
+    return FileResponse(ROOT / 'app/static/shorts.html')
+
+
+from app.shorts import router as shorts_router
+app.include_router(shorts_router)
+
+from app.grouped_audio import router as grouped_audio_router
+app.include_router(grouped_audio_router)

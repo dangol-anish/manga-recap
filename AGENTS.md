@@ -1,3 +1,7 @@
+# Current approved build: experimental Shorts branch
+
+- Build Shorts on `codex/shorts-workflow`, separately from long-form work. Bundle user-selected chapters' current narration JSONs and relevant context for external Gemini chat; provide a copyable prompt and compatible structured-output schema. Import proposals with complete short scripts and chapter-qualified source beat/panel references, including zero proposals. Validate receipts, IDs, source freshness, chronology and word budgets without changing saved work on failure. Provide optional selected-proposal labeled-page visual checks. Generate separate new Brian audio and vertical 30–120 second MP4s with quick phrase cuts, timed captions and smooth motion only on explicit selection. Preserve original narration, panels, audio and videos; save Shorts projects/jobs/revisions under ignored data/outputs. Maintain sequential heavy-task exclusion, stop/retry/recovery, native MP4 playback, dark glass controls and external-browser-only verification. Test only isolated fixtures; never automatically synthesize real shorts. No automatic commit/push.
+
 # Multi-manga panel detection
 
 - Stage 3 allows selecting chapters across multiple manga in one sequential job. Preserve selections when switching manga, show a grouped selection summary, retain each manga's own reading direction, and show per-manga and per-chapter progress. Save direction snapshots with the job and reuse them on resume even if library defaults change. Keep panel-only model filtering, output isolation and existing safe-cache/stop/resume behavior. Never automatically run real chapters during implementation.
@@ -170,3 +174,12 @@ The user explicitly approved making this app generic for daily use across manga 
 ### Chapter 1 subtle panel transitions
 
 - Add brief crossfades starting at the existing panel switch frames, including between beats. Cap them at four frames (about 0.17 seconds at 24 fps), shorten for very brief holds, and keep the outgoing panel frozen at its final camera position. Preserve exact audio, saved timings and total duration. Update the live preview, Chapter 1 MP4 and existing beat previews only. No new chapters, TTS, detection or cropping.
+
+# Current approved audio revision: grouped Gemini narration
+
+- Gemini Charon is the main option for new long-form audio selections. Combine selected chapters in natural order into balanced roughly 7–8 minute sections across chapter boundaries, keeping scripts unchanged. Save each returned WAV before free local English forced timing, publish compatible chapter/beat copies for Video, and provide one full selection track. Preserve all existing chapter audio, video, narration and prior revisions. Never automatically generate real speech during implementation or startup.
+- Use the existing ignored `.env` key and repo-local model cache. Enforce a conservative local request budget, distinguish daily quota, temporary rate limits, key/access, network and local timing failures, display reset time when known, and require explicit resume. Timing retries must reuse saved recordings. Brian at 1.0× with 180 ms period pauses is an explicit backup only; never silently switch voices. Keep sequential heavy-task exclusion, persisted recovery, dark glass controls and external-browser verification. Do not commit/push automatically.
+
+# Approved Gemini key rotation
+
+- Support the original and numbered GEMINI_API_KEY entries in the ignored .env, deduplicate secrets and keep them out of responses/jobs/logs. Switch to another available key only after confirmed quota/access rejection or a reached local daily budget. Persist per-key cooldowns, daily counters and rejected-access state; show available counts and explicit exhaustion/reset errors. Never rotate/resend after ambiguous timeouts, malformed replies or server failures. Keep Charon/script/checkpoints unchanged, preserve saved recordings and require explicit Brian fallback. Keys on one Google project share quota. Test with isolated mocked responses; no automatic real speech, browser interaction, commit or push.
