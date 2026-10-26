@@ -1,3 +1,7 @@
+# Branch integration approved
+
+- The user approved merging all app work into `main`. Shorts, grouped Gemini audio and error handling are now part of `main`; the earlier Shorts-only branch requirement is superseded. Preserve existing local assets and all other workflow safeguards.
+
 # Current approved build: experimental Shorts branch
 
 - Build Shorts on `codex/shorts-workflow`, separately from long-form work. Bundle user-selected chapters' current narration JSONs and relevant context for external Gemini chat; provide a copyable prompt and compatible structured-output schema. Import proposals with complete short scripts and chapter-qualified source beat/panel references, including zero proposals. Validate receipts, IDs, source freshness, chronology and word budgets without changing saved work on failure. Provide optional selected-proposal labeled-page visual checks. Generate separate new Brian audio and vertical 30–120 second MP4s with quick phrase cuts, timed captions and smooth motion only on explicit selection. Preserve original narration, panels, audio and videos; save Shorts projects/jobs/revisions under ignored data/outputs. Maintain sequential heavy-task exclusion, stop/retry/recovery, native MP4 playback, dark glass controls and external-browser-only verification. Test only isolated fixtures; never automatically synthesize real shorts. No automatic commit/push.

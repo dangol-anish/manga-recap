@@ -33,7 +33,7 @@ If `winget` is unavailable, install from [Git for Windows](https://git-scm.com/i
 ## 2. Clone into a short, local path
 
 ```powershell
-git clone https://github.com/dangol-anish/manga-recap.git C:\manga-recap
+git clone --branch main https://github.com/dangol-anish/manga-recap.git C:\manga-recap
 cd C:\manga-recap
 ```
 
@@ -62,6 +62,25 @@ Success ends with **“Setup passed”**. If a step fails, the script stops inst
 
 No virtual-environment activation or PowerShell execution-policy change is needed. Do not copy the Mac's `.venv` to Windows.
 
+## Configure Gemini audio keys
+
+The complete app, including Shorts and grouped Gemini audio, is available on `main`.
+Before using Gemini audio, create `.env` in the repository root:
+
+```powershell
+notepad .env
+```
+
+Save your own working keys using these variable names (replace the placeholder values):
+
+```dotenv
+GEMINI_API_KEY=your_first_key
+GEMINI_API_KEY_2=your_second_key
+GEMINI_API_KEY_3=your_third_key
+```
+
+The file must be named `.env`, not `.env.txt`. It is ignored by Git and is never included in a clone. Additional keys are optional; keys on the same Google project share its quota. Confirm free-tier/billing settings in Google AI Studio. The app does not enable billing. No key is needed to open the app; Gemini generation needs a valid key and internet. See [Gemini audio](GEMINI_AUDIO.md) for quota, recovery and storage details.
+
 ## 4. Start the app every time
 
 ```powershell
@@ -88,9 +107,10 @@ Use a current Edge, Chrome, Firefox or Brave. The app stays on your computer at 
 3. **Panel Detection:** select manga/chapters, set each manga's reading direction and start; watch progress, Stop/Resume as needed. Windows idle sleep is prevented while the detection worker runs, but this cannot override shutting down or a lid-close power policy.
 4. **Panel Review:** select detected chapters and prepare crops/labeled pages; the existing hidden review contact sheet remains hidden. Export & narrate takes you to Narration.
 5. **Narration:** export a batch of at most 20 labeled photos, attach them to a fresh image-capable AI chat, copy the matching prompt, then import the JSON reply into that batch; repeat in order. The app carries preceding saved story context. Only mark the final recap when the full story you are making ends there.
-6. **Audio:** choose a fully imported chapter and generate audio, or select several ready chapters in the queue; listen to the full track and regenerate individual beats if needed. New chapters use the current saved app default (Brian at 1.0× with 180 ms period pauses); existing chapter settings stay intact. **Internet is required:** Edge TTS sends narration to Microsoft's service.
+6. **Audio:** choose a manga and select fully imported chapters, then press **Create selected audio**. Gemini groups narration across chapters into sections rather than sending every chapter separately; new selections default to Charon at 1.2×. Listen to the full selected audio. Brian is an explicit backup for remaining sections, not an automatic provider switch. Existing recordings/settings stay intact. **Internet is required:** Gemini sends narration to Google; Brian sends narration to Microsoft. See [Gemini audio](GEMINI_AUDIO.md).
 7. **Video:** choose a chapter with current audio, click **Create video**, watch rendering progress, then use the real video player; timing changes require saving and rebuilding. Save/download the completed MP4.
 8. **Stitch:** select at least two finished chapter videos from one manga and combine; compatible videos are joined without re-encoding.
+9. **Shorts (optional):** bundle selected chapters’ saved narration, copy the prompt/schema into external Gemini chat, import proposals, then explicitly select a proposal for separate vertical audio/video creation. See [Shorts](SHORTS.md).
 
 Start with one short chapter before queuing a large library. There is no automatic real-manga processing on startup. Download sites, the external narration AI and online TTS are services outside the app and can impose limits or change.
 

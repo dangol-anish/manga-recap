@@ -172,7 +172,7 @@ Stitch uses free local FFmpeg stream copying, preserving the pictures and audio 
 
 ## Experimental Shorts
 
-On `codex/shorts-workflow`, open **Shorts** in the sidebar to package narration across selected chapters for Gemini, import short proposals, and create separate vertical MP4s. See [the Shorts guide](docs/SHORTS.md). Chapter work stays unchanged.
+On `main`, open **Shorts** in the sidebar to package narration across selected chapters for Gemini, import short proposals, and create separate vertical MP4s. See [the Shorts guide](docs/SHORTS.md). Chapter work stays unchanged.
 
 ## Errors and recovery
 
