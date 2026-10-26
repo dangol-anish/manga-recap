@@ -183,3 +183,7 @@ The user explicitly approved making this app generic for daily use across manga 
 # Approved Gemini key rotation
 
 - Support the original and numbered GEMINI_API_KEY entries in the ignored .env, deduplicate secrets and keep them out of responses/jobs/logs. Switch to another available key only after confirmed quota/access rejection or a reached local daily budget. Persist per-key cooldowns, daily counters and rejected-access state; show available counts and explicit exhaustion/reset errors. Never rotate/resend after ambiguous timeouts, malformed replies or server failures. Keep Charon/script/checkpoints unchanged, preserve saved recordings and require explicit Brian fallback. Keys on one Google project share quota. Test with isolated mocked responses; no automatic real speech, browser interaction, commit or push.
+
+# Latest approved default: 1.2× audio
+
+- New Gemini long-form selections default to 1.2× pitch-preserving local playback, retaining the original returned WAV and measuring phrase timing against the faster copy. Snapshot speed per job; resume old jobs at their saved speed (legacy jobs without a speed use 1.0×). Cache by speed and never automatically regenerate existing media. New Brian audio also defaults to 1.2× with the same 180 ms period pauses, while existing chapter/project pacing stays unchanged. No automatic real speech, browser interaction, commit or push.

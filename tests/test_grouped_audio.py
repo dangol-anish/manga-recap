@@ -57,6 +57,25 @@ class GroupedAudioTests(unittest.TestCase):
         self.assertEqual(response.status_code,206);self.assertEqual(len(response.content),100)
         directory=storage.OUTPUTS/'Audio'/'Sample'
         self.assertTrue((directory/'Chapter1-Audio.mp3').exists());self.assertEqual(len(list(directory.glob('Chapter1-Beat*-Audio.mp3'))),2)
+    def test_default_speed_prepares_new_audio_and_keeps_original(self):
+        a,b,c=self.mocks()
+        with a,b,c:job=self.begin()
+        self.assertEqual(job['status'],'complete',job['message']);self.assertEqual(job['speed'],1.2)
+        section=job['sections'][0];raw=g.metadata_file(job,section['original_recording']);paced=g.metadata_file(job,section['recording'])
+        self.assertNotEqual(raw,paced);self.assertAlmostEqual(section['recording']['duration'],4/1.2,delta=.15)
+        self.assertEqual(speech.status(self.mid,self.chapter)['pacing']['speed'],1.2)
+        before=raw.read_bytes();calls=len(self.calls)
+        g.prepare_speed(job,section)
+        self.assertEqual(raw.read_bytes(),before);self.assertEqual(len(self.calls),calls)
+    def test_old_job_keeps_normal_speed_after_default_change(self):
+        with patch.object(g,'DEFAULT_SPEED',1.),patch.object(g,'launch',side_effect=lambda job:(g.save({**job,'status':'paused'}) or job)):
+            job=g.start(self.mid,[self.chapter],True)
+        a,b,c=self.mocks()
+        with a,b,c:
+            g.resume(job['id']);g.worker.join(15)
+        job=g.load(job['id']);self.assertEqual(job['status'],'complete',job['message'])
+        self.assertEqual(job['speed'],1.);self.assertEqual(job['sections'][0]['recording']['duration'],4.)
+        self.assertNotIn('original_recording',job['sections'][0]);self.assertEqual(speech.status(self.mid,self.chapter)['pacing']['speed'],1.)
     def test_completed_selection_is_reused_without_another_request(self):
         a,b,c=self.mocks()
         with a,b,c:job=self.begin()

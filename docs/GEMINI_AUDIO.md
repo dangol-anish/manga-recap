@@ -6,7 +6,7 @@
 4. Listen to each returned section, or the **Full selected audio** when finished.
 5. Continue to Video; the chapters have compatible clips and phrase timings automatically.
 
-Repeating the same completed Gemini selection reuses its saved audio instead of spending another request. The script is unchanged. Whole story beats are grouped across chapter boundaries, usually around 1,250 words per request (roughly 7–8 minutes, depending on delivery). A single short chapter does not consume a separate request when it fits beside others. The last section is balanced with the others. Voice: Gemini Charon, matching the approved samples. Google receives narration only, not manga images. Internet is required. Gemini delivery and pauses are natural; unlike the Brian backup, pauses are not artificially fixed to 180 ms.
+Repeating the same completed Gemini selection reuses its saved audio instead of spending another request. The script is unchanged. Whole story beats are grouped across chapter boundaries, usually around 1,250 words per request (roughly 7–8 minutes, depending on delivery). A single short chapter does not consume a separate request when it fits beside others. The last section is balanced with the others. Voice: Gemini Charon. New selections default to 1.2× playback speed, applied locally without changing pitch. The original WAV is retained; phrase timings are measured against the faster recording so Video stays synchronized. Existing selections retain their saved speed. Google receives narration only, not manga images. Internet is required. Gemini delivery and pauses are natural; unlike the Brian backup, pauses are not artificially fixed to 180 ms.
 
 ## Setup
 
@@ -20,7 +20,7 @@ Existing Python dependencies and FFmpeg are sufficient on macOS and Windows. On 
 
 Errors identify whether the problem is a daily quota (with a local reset time), a temporary request/token/capacity limit, rejected key/access, connection/timeout, incomplete recording, changed narration, or local timing. Google may count failed/timed-out requests. Completed recordings stay saved. **Resume Gemini** uses an available key for unfinished recordings; it does not resend recordings already saved. A timing/model-download failure retries locally from the WAV.
 
-**Use Brian for remaining sections** is a deliberate backup. It keeps already-returned Gemini recordings, so a mixed selection can contain both voices. Brian uses 1.0× speed and measured 180 ms period pauses. The app never changes providers silently.
+**Use Brian for remaining sections** is a deliberate backup. It keeps already-returned Gemini recordings, so a mixed selection can contain both voices. New Brian backup audio uses 1.2× speed and measured 180 ms period pauses. Older selections keep their saved backup settings. The app never changes providers silently.
 
 ## Storage and compatibility
 

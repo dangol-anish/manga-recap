@@ -87,7 +87,7 @@ class ShortsTests(unittest.TestCase):
         with patch.object(shorts.audio, 'DEFAULT_VOICE', 'changed'), patch.object(shorts.audio, 'DEFAULT_PACING', {'speed': 2}):
             self.assertEqual(shorts.clip_token(project, short, 0), token)
         self.assertEqual(project['voice'], 'en-US-BrianMultilingualNeural')
-        self.assertEqual(project['pacing']['speed'], 1.0)
+        self.assertEqual(project['pacing']['speed'], 1.2)
 
     def test_zero_proposals_and_atomic_failure(self):
         project = self.imported(); before = (shorts.root(self.pid) / 'project.json').read_bytes()

@@ -33,6 +33,8 @@ MODEL = 'gemini-3.8-flash-tts'
 VOICE = 'Charon'
 STYLE = 'Read the complete transcript verbatim in one consistent male storyteller voice. Natural conversational delivery, restrained emotion appropriate to the story, brief sentence pauses. Keep the same voice, accent and recording tone. About 160 words per minute. No introduction, summary, added words or omitted passages.'
 VERSION = 1
+DEFAULT_SPEED = 1.2
+LEGACY_BACKUP_PACING = {'rate': '+0%', 'speed': 1., 'sentence_pause': .18}
 active = worker = None
 lock = threading.RLock()
 cancel = threading.Event()
@@ -304,12 +306,33 @@ def record_section(job, section):
     if job['engine'] == 'gemini': meta = gemini(section['text'], file)
     else:
         mp3 = file.with_suffix('.mp3')
-        spoken = alignment.speech(section['text'], mp3, dict(audio.DEFAULT_PACING), audio.DEFAULT_VOICE)
+        settings = dict(job.get('backup_pacing', LEGACY_BACKUP_PACING))
+        spoken = alignment.speech(section['text'], mp3, settings, audio.DEFAULT_VOICE)
         result = subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-i', str(mp3), '-ar', '24000', '-ac', '1', str(file)], capture_output=True, timeout=120)
         if result.returncode: raise ValueError('Could not save the Brian backup recording.')
         # Edge timestamps are already accurate; avoid the local model for backup sections.
-        section['timing'] = spoken['words']; meta = {'provider': 'brian', 'voice': audio.DEFAULT_VOICE, 'duration': spoken['duration']}
+        section['timing'] = spoken['words']; meta = {'provider': 'brian', 'voice': audio.DEFAULT_VOICE, 'duration': spoken['duration'], 'speed': settings['speed'], 'pacing': settings}
     meta.update(file=file.name, sha256=checksum(file)); section['recording'] = meta; save(job)
+
+
+def prepare_speed(job, section):
+    """Make a pitch-preserving playback copy before measuring phrase times."""
+    meta = section['recording']; speed = job.get('speed', 1.)
+    if meta['provider'] != 'gemini' or speed == 1. or meta.get('speed') == speed: return
+    original = metadata_file(job, meta)
+    target = directory(job['id']) / ('paced-' + uuid.uuid4().hex + '.wav')
+    temporary = target.with_name('.' + target.name)
+    try:
+        result = subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-i', str(original), '-af', f'atempo={speed}', '-ar', '24000', '-ac', '1', str(temporary)], capture_output=True, timeout=180)
+        if result.returncode: raise ValueError('Could not prepare the faster playback copy. The original recording is saved; resume retries locally.')
+        with wave.open(str(temporary), 'rb') as stream: duration = stream.getnframes() / stream.getframerate()
+        if not math.isfinite(duration) or abs(duration - meta['duration'] / speed) > .15: raise ValueError('Faster audio duration did not match the selected speed. Original audio is retained.')
+        temporary.replace(target)
+        section['original_recording'] = dict(meta)
+        section['recording'] = {**meta, 'file': target.name, 'sha256': checksum(target), 'duration': duration, 'speed': speed}
+        section['timing'] = None
+        save(job)
+    finally: temporary.unlink(missing_ok=True)
 
 
 def publish_chapters(job):
@@ -329,7 +352,7 @@ def publish_chapters(job):
         folder.mkdir(parents=True, exist_ok=True); clips = {}; beats = []
         by_number = {r['number']: (s, r) for s, r in selected}
         for original in chapter['beats']:
-            beat = copy.deepcopy(original); beat['silent'] = not beat['narration'].strip(); beat['batch_id'] = 'grouped-audio'; beat['pacing'] = {'speed': 1., 'mode': 'natural'}
+            beat = copy.deepcopy(original); beat['silent'] = not beat['narration'].strip(); beat['batch_id'] = 'grouped-audio'; beat['pacing'] = {'speed': job.get('speed', 1.), 'mode': 'natural'}
             beat['token'] = story._digest([chapter_token, beat['number']]); beat['voice'] = VOICE
             if not beat['silent']:
                 section, ref = by_number[beat['number']]; recording = metadata_file(job, section['recording']); words = section['timing']
@@ -350,15 +373,15 @@ def publish_chapters(job):
                         temporary.replace(target)
                     finally: temporary.unlink(missing_ok=True)
                 beat['voice'] = section['recording']['voice']
-                if section['recording']['provider'] == 'brian': beat['pacing'] = dict(audio.DEFAULT_PACING)
+                if section['recording']['provider'] == 'brian': beat['pacing'] = dict(section['recording'].get('pacing', LEGACY_BACKUP_PACING))
                 clips[beat['token']] = {'token': beat['token'], 'file': target.name, 'sha256': checksum(target), 'duration': end - begin,
                     'voice': beat['voice'], 'pacing': beat['pacing'], 'words': local, 'timing_anchors': timed, 'provider': section['recording']['provider']}
             beats.append(beat)
         voices = list(dict.fromkeys(b['voice'] for b in beats if not b['silent']))
         display_voice = 'Gemini Charon' if voices == [VOICE] else 'Brian Multilingual' if voices == [audio.DEFAULT_VOICE] else 'Gemini Charon + Brian'
         overlay = {'token': chapter_token, 'folder': folder.relative_to(storage.ROOT).as_posix(),
-            'manifest': {'clips': clips, 'voice': display_voice, 'pacing': {'speed': 1., 'mode': 'natural'}},
-            'source': {'manga': job['source']['manga'], 'chapter': name, 'voice': display_voice, 'pacing': {'speed': 1., 'mode': 'natural'}, 'beats': beats, 'revision': chapter_token},
+            'manifest': {'clips': clips, 'voice': display_voice, 'pacing': {'speed': job.get('speed', 1.), 'mode': 'natural'}},
+            'source': {'manga': job['source']['manga'], 'chapter': name, 'voice': display_voice, 'pacing': {'speed': job.get('speed', 1.), 'mode': 'natural'}, 'beats': beats, 'revision': chapter_token},
             'job_id': job['id']}
         fresh(job)
         storage.write_json(folder / 'manifest.json', overlay['manifest'])
@@ -415,6 +438,7 @@ def run(job):
                 if job['engine'] == 'gemini' and section['number'] > 1: quota_wait()
                 record_section(job, section)
             metadata_file(job, section['recording'])
+            prepare_speed(job, section)
             if cancel.is_set(): raise InterruptedError()
             if not section['timing']:
                 job.update(message='Recording saved. Loading the free local speech timing model (about 360 MB on first use)…'); save(job)
@@ -469,14 +493,14 @@ def start(mid, chapters, confirmed=True):
         token = story._digest(snapshot)
         for filename in sorted(safe(storage.DATA / 'grouped-audio').glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True):
             previous = load(filename.stem)
-            if previous.get('source_token') == token and previous.get('engine') == 'gemini' and previous.get('model') == MODEL:
+            if previous.get('source_token') == token and previous.get('engine') == 'gemini' and previous.get('model') == MODEL and previous.get('speed', 1.) == DEFAULT_SPEED:
                 if previous['status'] in ('failed', 'paused'): return view(previous)
                 if previous['status'] == 'complete' and previous.get('full'):
                     metadata_file(previous, previous['full'])
                     for section in previous['sections']: metadata_file(previous, section['recording'])
                     return view(previous)
         job = {'id': uuid.uuid4().hex, 'created_at': time.time(), 'source': snapshot, 'source_token': token, 'sections': sections(snapshot),
-            'engine': 'gemini', 'model': MODEL, 'voice': VOICE, 'full': None, 'status': 'waiting', 'error': None, 'message': 'Starting selected narration…'}
+            'engine': 'gemini', 'model': MODEL, 'voice': VOICE, 'speed': DEFAULT_SPEED, 'backup_pacing': dict(audio.DEFAULT_PACING), 'full': None, 'status': 'waiting', 'error': None, 'message': 'Starting selected narration…'}
         return launch(job)
 
 
@@ -514,7 +538,7 @@ def shutdown():
 
 def view(job):
     result = {k: copy.deepcopy(job.get(k)) for k in ('id', 'created_at', 'status', 'message', 'engine', 'error', 'current_section')}
-    result.update(manga=job['source']['manga'], chapters=[c['chapter'] for c in job['source']['chapters']], busy=active is not None, full=bool(job.get('full')),
+    result.update(speed=job.get('speed', 1.), manga=job['source']['manga'], chapters=[c['chapter'] for c in job['source']['chapters']], busy=active is not None, full=bool(job.get('full')),
                   total_sections=len(job['sections']), completed=sum(bool(s['timing']) for s in job['sections']),
                   sections=[{'number': s['number'], 'words': s['words'], 'chapters': list(dict.fromkeys(r['chapter'] for r in s['refs'])),
                              'recorded': bool(s['recording']), 'timed': bool(s['timing']), 'provider': s['recording']['provider'] if s['recording'] else None, 'key_label': s['recording'].get('key_label') if s['recording'] else None,

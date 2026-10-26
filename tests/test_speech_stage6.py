@@ -63,7 +63,7 @@ class SpeechTests(unittest.TestCase):
         response=self.client.get(self.speech_api);self.assertEqual(response.status_code,200)
         s=response.json();self.assertEqual(len(s['beats']),2);self.assertEqual(s['ready'],0)
         self.assertEqual(s['voice'],'en-US-BrianMultilingualNeural')
-        self.assertEqual(s['pacing'],{'rate':'+0%','speed':1.0,'sentence_pause':.18})
+        self.assertEqual(s['pacing'],{'rate':'+20%','speed':1.2,'sentence_pause':.18})
         self.assertEqual(self.said,[]);self.assertFalse(speech.root(self.mid,self.chapter).exists())
         self.assertEqual(story.state_path(self.mid).read_bytes(),before)
         self.assertEqual(self.client.get('/api/speech/catalog').json()[0]['chapters'][0]['audio_ready'],True)
@@ -226,7 +226,7 @@ class SpeechTests(unittest.TestCase):
         self.assertEqual(self.said,[])
 
     def test_default_change_preserves_recorded_chapter_pacing_and_tokens(self):
-        old_pacing={'rate':'+20%','speed':1.2,'sentence_pause':.18}
+        old_pacing={'rate':'+0%','speed':1.0,'sentence_pause':.18}
         with patch.object(speech,'PACING',old_pacing):before=self.generate()
         directory=speech.root(self.mid,self.chapter);manifest_before=(directory/'manifest.json').read_bytes()
         current=self.current()
