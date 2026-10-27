@@ -65,7 +65,7 @@ def clean(value, limit=4000):
     except (OSError, UnicodeError): pass
     for secret in secrets: text = text.replace(secret, '[hidden]')
     text = re.sub(r'(?:AQ\.[A-Za-z0-9_-]{20,}|AIza[A-Za-z0-9_-]{25,})', '[hidden key]', text)
-    text = re.sub(r'(https?://[^\s?#]+)\?[^\s]+', r'\1?[hidden query]', text)
+    text = re.sub(r'(https?://[^\s?#]+)\?(?:\[hidden query\]|[^\s]+)', r'\1?[hidden query]', text)
     return text[:limit]
 
 
@@ -182,6 +182,7 @@ def describe(exc, stage='library', operation='Complete selected work', resource=
         # Provider errors already carry specific recovery instructions; keep them.
         code = original.code
         action = 'Use the recovery instructions in the provider message above. Brian is used only if you explicitly select it.' if stage == 'grouped-audio' and hasattr(original,'reset') else action
+    if getattr(original, 'recovery', None):action = original.recovery
     ref = uuid.uuid4().hex[:12]
     saved = SAVED.get(stage, 'Check the affected file or task status before retrying. No automatic data reset is performed.')
     if 'recover' in operation.lower():action+=' After fixing the recovery problem, restart the app so saved tasks can be checked again.'

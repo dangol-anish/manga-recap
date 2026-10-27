@@ -10,6 +10,7 @@ from unittest.mock import patch, AsyncMock
 from PIL import Image
 from fastapi.testclient import TestClient
 from app import downloader as d, download_sources as s, storage
+from app import download_requests as requests
 from app.main import app
 
 
@@ -143,9 +144,90 @@ class DownloadTests(unittest.TestCase):
 
     def test_source_reorder_keeps_existing_images(self):
         self.transfer();original=self.job['chapters'][0]['pages'][0]['sha256']
+        # Complete chapters intentionally do not reload their source lists.
+        d.destination(self.job['chapters'][0]['folder']+'/002.png').unlink()
         self.transfer(urls=self.urls[::-1]);chapter=self.job['chapters'][0]
         self.assertEqual(chapter['status'],'failed');self.assertIn('order changed',chapter['error'])
         self.assertEqual(chapter['pages'][0]['sha256'],original)
+
+    def test_complete_chapter_resume_makes_no_page_list_or_image_requests(self):
+        self.transfer()
+        with patch.object(s,'image_urls',AsyncMock()) as lists,patch.object(s,'fetch',AsyncMock()) as pages:
+            asyncio.run(d.transfer(self.job))
+        lists.assert_not_awaited();pages.assert_not_awaited()
+        self.assertEqual(self.job['chapters'][0]['status'],'complete')
+
+    def test_only_incomplete_chapters_reload_and_completed_images_stay_unchanged(self):
+        self.transfer();c=self.job['chapters'][0]
+        before={p['file']:d.destination(c['folder']+'/'+p['file']).stat().st_mtime_ns for p in c['pages']}
+        second={'id':'c2','name':'Chapter 2','url':'https://mangapill.com/chapters/c2','folder':self.job['folder']+'/Chapter 2','status':'pending','pages':[]}
+        self.job['chapters'].append(second)
+        with patch.object(s,'image_urls',AsyncMock(return_value=self.urls)) as lists,patch.object(s,'fetch',AsyncMock(return_value=png())) as pages:
+            asyncio.run(d.transfer(self.job))
+        self.assertEqual(lists.await_count,1);self.assertEqual(lists.await_args.args[1]['id'],'c2')
+        self.assertEqual(pages.await_count,2)
+        self.assertEqual(before,{p['file']:d.destination(c['folder']+'/'+p['file']).stat().st_mtime_ns for p in c['pages']})
+
+    def test_repeated_page_list_rate_limit_stops_queue_after_two_retries(self):
+        from tests.test_download_requests import Clock
+        clock=Clock();calls=[]
+        self.job['chapters'].append({**self.job['chapters'][0],'id':'c2','name':'Chapter 2','pages':[]})
+        async def limited(client,chapter,host):
+            calls.append((chapter['id'],clock.now));raise requests.SourceCooldown(host,clock.now+5,True)
+        with patch.object(d.time,'time',lambda:clock.now),patch.object(d.asyncio,'sleep',clock.sleep),patch.object(s,'image_urls',limited):
+            with self.assertRaises(requests.SourceCooldown):asyncio.run(d.transfer(self.job))
+        self.assertEqual([v[0] for v in calls],['c1']*3)
+        self.assertGreaterEqual(calls[1][1]-calls[0][1],5)
+        self.assertGreaterEqual(calls[2][1]-calls[1][1],5)
+        self.assertEqual(self.job['source_wait']['until'],calls[-1][1]+5)
+        self.assertEqual(self.job['chapters'][1]['status'],'pending')
+
+    def test_stop_during_cooldown_does_not_send_another_request(self):
+        async def limited(*args):raise requests.SourceCooldown('mangapill.com',d.time.time()+3600,True)
+        async def stop(_):d.stop_event.set()
+        with patch.object(d.asyncio,'sleep',stop),patch.object(s,'image_urls',AsyncMock(side_effect=limited)) as lists:
+            asyncio.run(d.transfer(self.job))
+        self.assertEqual(lists.await_count,1)
+        self.assertIn('source_wait',self.job)
+
+    def test_rate_limited_worker_saves_paused_state_and_releases_busy_state(self):
+        import time
+        d.active={'id':self.job['id'],'started':time.monotonic()}
+        with patch.object(d,'transfer',AsyncMock(side_effect=requests.SourceCooldown('mangapill.com',time.time()+60,True))):
+            d.run(self.job)
+        self.assertIsNone(d.active)
+        self.assertEqual(d.load('jobs',self.job['id'])['status'],'paused')
+
+    def test_real_request_path_waits_for_429_and_resumes_only_new_chapter(self):
+        import httpx
+        from tests.test_download_requests import Clock
+        self.transfer();clock=Clock();calls=[];original_client=httpx.AsyncClient
+        self.job['chapters'].append({'id':'c2','name':'Chapter 2','url':'https://mangapill.com/chapters/c2','folder':self.job['folder']+'/Chapter 2','status':'pending','pages':[]})
+        def serve(request):
+            calls.append((str(request.url),clock.now))
+            if request.url.path=='/chapters/c2':
+                if len(calls)==1:return httpx.Response(429,headers={'Retry-After':'5'})
+                return httpx.Response(200,content=b'<img class="js-page" src="https://cdn.example/new.png">')
+            return httpx.Response(200,content=png('blue'))
+        def client(**kwargs):return original_client(transport=httpx.MockTransport(serve),**kwargs)
+        with patch.object(d.time,'time',lambda:clock.now),patch.object(d.asyncio,'sleep',clock.sleep),patch.object(s,'public_url',lambda u:u),patch.object(d.httpx,'AsyncClient',client):
+            asyncio.run(d.transfer(self.job))
+        self.assertEqual([c[0] for c in calls],['https://mangapill.com/chapters/c2']*2+['https://cdn.example/new.png'])
+        self.assertGreaterEqual(calls[1][1]-calls[0][1],5)
+        self.assertGreaterEqual(calls[2][1]-calls[1][1],requests.INTERVAL)
+        self.assertTrue(all(c['status']=='complete' for c in self.job['chapters']))
+
+    def test_stop_as_429_arrives_still_saves_source_cooldown(self):
+        import httpx
+        original_client=httpx.AsyncClient;calls=[]
+        def serve(request):
+            calls.append(request);d.stop_event.set()
+            return httpx.Response(429,headers={'Retry-After':'600'})
+        def client(**kwargs):return original_client(transport=httpx.MockTransport(serve),**kwargs)
+        with patch.object(s,'public_url',lambda u:u),patch.object(d.httpx,'AsyncClient',client):
+            asyncio.run(d.transfer(self.job))
+        self.assertEqual(len(calls),1)
+        self.assertGreater(requests.read_state()['hosts']['mangapill.com']['until'],d.time.time()+590)
 
     def test_crash_after_publish_before_complete_is_adopted(self):
         self.transfer()

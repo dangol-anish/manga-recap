@@ -6,7 +6,7 @@ The current app runs at `127.0.0.1:8000`, stores local JSON and uses one heavy j
 
 | UI / route | Backend | Browser code |
 | --- | --- | --- |
-| Downloader `/` | `downloader.py`, `download_sources.py` | `downloader.html/js` |
+| Downloader `/` | `downloader.py`, `download_sources.py`, `download_requests.py` | `downloader.html/js` |
 | Renumbering `/renumbering` | `renumbering.py` | `renumbering.html/js` |
 | Detection `/detection` | `detection.py`, `detection_worker.py`, `detector.py` | `detection.html/js` |
 | Panel Review `/panels` | `panel_preparation.py` | `panel_preparation.html/js`, panel editor |

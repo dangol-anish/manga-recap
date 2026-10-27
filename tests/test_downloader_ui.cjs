@@ -32,5 +32,16 @@ class Element {
   assert.equal(get('#folder-message').hidden,false);
   assert.equal(get('#folder-message').textContent,'Finder could not open.');
   assert.equal(get('#open-folder-button').disabled,false,'Failure must allow retry');
+  job.status='running';job.source_wait={host:'weebcentral.com',until:Date.now()/1000+120};
+  vm.runInContext('render()',context);
+  assert.equal(get('#source-cooldown').hidden,false);
+  assert.match(get('#source-cooldown').textContent,/continue automatically/);
+  assert.equal(get('#stop-button').disabled,false,'A cooldown must remain stoppable');
+  job.status='paused';vm.runInContext('render()',context);
+  assert.equal(get('#resume-button').disabled,true,'Do not offer an early retry');
+  assert.match(get('#source-cooldown').textContent,/Resume this download after/);
+  job.source_wait.until=Date.now()/1000-1;vm.runInContext('render()',context);
+  assert.equal(get('#source-cooldown').hidden,true);
+  assert.equal(get('#resume-button').disabled,false);
   console.log('Folder button: enabled after load; click endpoint; retry and inline errors passed.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -7,6 +7,7 @@ import socket
 from decimal import Decimal
 
 import httpx
+from app import download_requests as requests
 
 SOURCES = {'mangapill.com': 'MangaPill', 'weebcentral.com': 'WeebCentral'}
 HEADERS = {'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html,image/*;q=0.9,*/*;q=0.8'}
@@ -106,12 +107,17 @@ async def fetch(client, url, referer, limit=MAX_HTML):
     """Validate every redirect; bound response size before decoding/writing."""
     for _ in range(6):
         public_url(url)
+        await requests.before(url, referer)
         async with client.stream('GET', url, headers={**HEADERS, 'Referer': referer}) as response:
             if response.is_redirect:
                 location = response.headers.get('location')
                 if not location: raise ValueError('Source redirect has no destination.')
                 url = urljoin(url, location)
                 continue
+            if response.status_code == 429:
+                cooldown = await requests.limited(url, referer, response.headers)
+                try: response.raise_for_status()
+                except httpx.HTTPStatusError as exc: raise cooldown from exc
             response.raise_for_status()
             data = bytearray()
             async for chunk in response.aiter_bytes():

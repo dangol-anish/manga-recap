@@ -18,7 +18,7 @@ from PIL import Image
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app import storage, download_sources as sources
+from app import storage, download_sources as sources, download_requests as requests
 from app.chapter_names import chapter_folder_name
 
 router = APIRouter(prefix='/api/downloader')
@@ -124,93 +124,138 @@ def create(catalog_id, chapter_ids):
     return job
 
 
+def wait_notice(job, host, until, reported):
+    if until is None:
+        job.pop('source_wait', None)
+        job['message'] = 'Continuing ' + job.get('current_request', 'selected downloads') + '.'
+    else:
+        job['source_wait'] = {'host': host, 'until': until, 'reported': reported}
+        job['message'] = f'{host} is limiting requests. Waiting until {time.strftime("%H:%M:%S UTC", time.gmtime(until))}; this download will continue automatically unless stopped.'
+    save(job)
+
+
+async def request_with_cooldown(job, label, call):
+    job['current_request'] = label
+    for attempt in range(3):
+        if stop_event.is_set(): raise requests.DownloadStopped()
+        try:
+            return await call()
+        except requests.SourceCooldown as exc:
+            wait_notice(job, exc.host, exc.reset, exc.reported)
+            job['source_wait']['retry'] = attempt + 1
+            save(job)
+            if attempt == 2: raise
+            # Never retry early. Stop remains responsive during long cooldowns.
+            while time.time() < exc.reset:
+                if stop_event.is_set(): raise requests.DownloadStopped()
+                await asyncio.sleep(min(.25, exc.reset-time.time()))
+            wait_notice(job, exc.host, None, False)
+
+
+def verify_chapter(chapter):
+    for page in chapter.get('pages', []):
+        path = destination(chapter['folder'] + '/' + page['file']) if page.get('file') else None
+        page['status'] = 'complete' if path and verified(path, page) else 'pending'
+        if page['status'] == 'complete':
+            page.pop('error', None); page.pop('error_details', None)
+    return bool(chapter.get('pages')) and all(p['status'] == 'complete' for p in chapter['pages'])
+
+
 async def transfer(job):
+    with requests.request_context(stop_event.is_set, lambda host, until, reported: wait_notice(job, host, until, reported)):
+        try:
+            await transfer_requests(job)
+        except requests.DownloadStopped:
+            return
+
+
+async def transfer_requests(job):
     async with httpx.AsyncClient(timeout=httpx.Timeout(20, connect=10), follow_redirects=False) as client:
-        # Discover all selected chapters first, so the download progress has a real denominator.
+        # Hash-check local work first. Complete chapters need no source request,
+        # even if a previous page-list refresh failed or the app was interrupted.
+        complete = set()
         for chapter in job['chapters']:
             if stop_event.is_set(): return
+            if verify_chapter(chapter):
+                chapter.update(status='complete', discovered=True)
+                chapter.pop('error', None); chapter.pop('error_details', None)
+                complete.add(chapter['id'])
+        save(job)
+        for chapter in job['chapters']:
+            if stop_event.is_set(): return
+            if chapter['id'] in complete: continue
             job['message'] = f'Loading page list: {chapter["name"]}'
             save(job)
             try:
-                urls = await sources.image_urls(client, chapter, job['host'])
+                urls = await request_with_cooldown(job, 'page list for '+chapter['name'], lambda: sources.image_urls(client, chapter, job['host']))
                 old = chapter['pages']
                 if old and [u.split('?', 1)[0] for u in urls] != [p['url'].split('?', 1)[0] for p in old]:
                     raise ValueError('Source page order changed. Saved images were kept; start a new selection after reviewing the source.')
-                chapter['pages'] = [{**(old[i] if old else {}), 'url': url, 'status': 'pending'} for i, url in enumerate(urls)]
+                chapter['pages'] = [{**(old[i] if old else {'status': 'pending'}), 'url': url} for i, url in enumerate(urls)]
                 chapter['discovered'] = True
-                chapter.pop('error', None)
+                chapter.pop('error', None); chapter.pop('error_details', None)
+            except requests.DownloadStopped:
+                raise
             except Exception as exc:
                 detail = errors.describe(exc, 'downloader', 'Load chapter page list', chapter['name'])
                 chapter.update(status='failed', error=detail['message'], error_details=detail, discovered=False)
+                if isinstance(exc, requests.SourceCooldown):
+                    save(job); raise
             save(job)
         for chapter in job['chapters']:
             if stop_event.is_set(): return
-            if not chapter.get('discovered'): continue
+            if chapter['id'] in complete or not chapter.get('discovered'): continue
             folder = destination(chapter['folder'])
             folder.mkdir(parents=True, exist_ok=True)
             chapter['status'] = 'running'
+            save(job)
+            # Sequential, paced requests prevent queued images from continuing
+            # to hammer a source after one request receives HTTP 429.
             for index, page in enumerate(chapter['pages']):
                 if stop_event.is_set(): return
-                path = destination(chapter['folder'] + '/' + page['file']) if page.get('file') else None
-                page['status'] = 'complete' if path and verified(path, page) else 'pending'
-            save(job)
-            # Three requests at once keeps memory/network usage modest on a weak laptop.
-            sem = asyncio.Semaphore(3)
-            async def one(index, page):
-                async with sem:
-                    if stop_event.is_set() or page.get('status') == 'complete': return
-                    for attempt in range(3):
-                        if stop_event.is_set(): return
-                        with lock:
-                            page.update(status='downloading', error='')
-                            job['message'] = f'{chapter["name"]} · downloading page {index + 1}'
-                            save(job)
-                        temporary = folder / f'.{index + 1:03d}-{job["id"]}.part'
-                        try:
-                            data = await sources.fetch(client, page['url'], f'https://{job["host"]}/', sources.MAX_IMAGE)
-                            with Image.open(BytesIO(data)) as image:
-                                ext = {'JPEG': '.jpg', 'PNG': '.png', 'WEBP': '.webp'}.get(image.format)
-                                if not ext or image.width * image.height > 60_000_000: raise ValueError('Unsupported or oversized page image.')
-                                image.verify()
-                            # Verify the pixel stream too; an HTML error page never counts as an image.
-                            with Image.open(BytesIO(data)) as image: image.load()
-                            filename = f'{index + 1:03d}{ext}'
-                            target = destination(chapter['folder'] + '/' + filename)
-                            if target.exists() and page.get('file') != filename:
-                                raise ValueError('An untracked file exists at this destination; it was not overwritten.')
-                            # A chapter folder belongs to one resumable job, claimed before transfer.
-                            # Windows FlushFileBuffers requires a writable handle.
-                            # Flush the original writer before closing/publishing.
-                            with temporary.open('wb') as stream:
-                                stream.write(data)
-                                stream.flush()
-                                os.fsync(stream.fileno())
-                            # Persist the intended file/hash before publishing it. If the server
-                            # stops between rename and completion, resume can adopt that exact file.
-                            with lock:
-                                page.update(file=filename, bytes=len(data), sha256=sha256(data).hexdigest())
-                                save(job)
-                            temporary.replace(target)
-                            with lock:
-                                page.update(status='complete', error='')
-                                save(job)
-                            return
-                        except Exception as exc:
-                            with lock:
-                                detail = errors.describe(exc, 'downloader', 'Download page', chapter['name'] + ' / page ' + str(index + 1))
-                                page.update(status='failed', error=detail['message'], error_details=detail)
-                                save(job)
-                            if detail['code'] in ('disk_full','permission_denied','file_in_use','conflict','source_blocked','source_rate_limit'):break
-                            if attempt < 2:
-                                for _ in range(10 * (attempt + 1)):
-                                    if stop_event.is_set(): return
-                                    await asyncio.sleep(.1)
-                        finally:
-                            temporary.unlink(missing_ok=True)
-            await asyncio.gather(*(one(i, p) for i, p in enumerate(chapter['pages'])))
+                if page.get('status') == 'complete': continue
+                for attempt in range(3):
+                    if stop_event.is_set(): return
+                    page.update(status='downloading', error='')
+                    job['message'] = f'{chapter["name"]} · downloading page {index + 1}'
+                    save(job)
+                    temporary = folder / f'.{index + 1:03d}-{job["id"]}.part'
+                    try:
+                        data = await request_with_cooldown(job, chapter['name']+' / page '+str(index+1), lambda: sources.fetch(client, page['url'], f'https://{job["host"]}/', sources.MAX_IMAGE))
+                        with Image.open(BytesIO(data)) as image:
+                            ext = {'JPEG': '.jpg', 'PNG': '.png', 'WEBP': '.webp'}.get(image.format)
+                            if not ext or image.width * image.height > 60_000_000: raise ValueError('Unsupported or oversized page image.')
+                            image.verify()
+                        with Image.open(BytesIO(data)) as image: image.load()
+                        filename = f'{index + 1:03d}{ext}'
+                        target = destination(chapter['folder'] + '/' + filename)
+                        if target.exists() and page.get('file') != filename:
+                            raise ValueError('An untracked file exists at this destination; it was not overwritten.')
+                        with temporary.open('wb') as stream:
+                            stream.write(data); stream.flush(); os.fsync(stream.fileno())
+                        page.update(file=filename, bytes=len(data), sha256=sha256(data).hexdigest())
+                        save(job)
+                        temporary.replace(target)
+                        page.update(status='complete', error=''); page.pop('error_details', None)
+                        save(job)
+                        break
+                    except requests.DownloadStopped:
+                        raise
+                    except Exception as exc:
+                        detail = errors.describe(exc, 'downloader', 'Download page', chapter['name'] + ' / page ' + str(index + 1))
+                        page.update(status='failed', error=detail['message'], error_details=detail)
+                        save(job)
+                        if isinstance(exc, requests.SourceCooldown):
+                            chapter['status']='failed';save(job);raise
+                        if detail['code'] in ('disk_full','permission_denied','file_in_use','conflict','source_blocked','source_rate_limit'): break
+                        if attempt < 2:
+                            for _ in range(10 * (attempt + 1)):
+                                if stop_event.is_set(): return
+                                await asyncio.sleep(.1)
+                    finally:
+                        temporary.unlink(missing_ok=True)
             chapter['status'] = 'complete' if all(p.get('status') == 'complete' for p in chapter['pages']) else 'failed'
             save(job)
-
 
 def run(job):
     global active
@@ -218,8 +263,15 @@ def run(job):
         asyncio.run(transfer(job))
         with lock:
             if stop_event.is_set(): job.update(status='paused', message='Stopped. Verified pages are safe; resume to continue.')
-            elif all(c['status'] == 'complete' for c in job['chapters']): job.update(status='complete', message='All selected chapters downloaded and verified.')
+            elif all(c['status'] == 'complete' for c in job['chapters']):
+                job.update(status='complete', message='All selected chapters downloaded and verified.')
+                job.pop('source_wait', None)
             else: job.update(status='failed', message='Some pages or chapters failed. Resume to retry; completed images are preserved.')
+    except requests.SourceCooldown as exc:
+        with lock:
+            job['source_wait'] = {**job.get('source_wait', {}), 'host': exc.host, 'until': exc.reset, 'reported': exc.reported}
+            job.update(status='paused', message=str(exc)+' Resume the original download after this time. Completed images are safe.')
+            job['error_details']=errors.describe(exc,'downloader','Wait for source cooldown',job.get('current_request'))
     except Exception as exc:
         with lock:
             job['status']='failed'; errors.failure(job, exc, 'downloader', 'Download selected chapters', job.get('folder'))
@@ -249,7 +301,8 @@ def start(job):
         for chapter in job['chapters']:
             folder = destination(chapter['folder'])
             folder.mkdir(parents=True, exist_ok=True)
-            storage.write_json(folder / '.download-owner.json', {'job_id': job['id']})
+            if not (folder / '.download-owner.json').exists():
+                storage.write_json(folder / '.download-owner.json', {'job_id': job['id']})
         stop_event.clear()
         job.update(status='running', message='Loading selected chapter page lists…')
         save(job)
