@@ -30,6 +30,8 @@ The app discovers selected page lists before showing determinate page progress. 
 
 If the source returns **HTTP 429**, all requests to that source (including its image CDN) share a saved cooldown. The progress area shows the remaining wait and Stop remains available. A valid `Retry-After` duration or HTTP date is honored; otherwise the app waits at least two minutes, increasing repeated unknown waits up to 30 minutes. A running operation retries at most twice after the cooldown, then pauses with an explicit explanation. Resume the original job after the wait; creating another job or restarting the app does not remove the source cooldown. Requests to the other approved source have their own pacing. No proxy or limit bypass is used.
 
+**Clear from list** hides the selected stopped/finished download; **Clear history** hides all inactive entries while leaving running downloads visible. These controls do not delete manga, download manifests, folder ownership or source cooldowns. Use **Show cleared** and **Restore to list** to bring a record back. Explicitly resuming a cleared record also restores it. Folder conflicts and renumbering safeguards still apply.
+
 Source adapters are independent Python implementations in this repo. They use HTTPX and the standard HTML parser, without a browser engine or paid service. Current public-site access can change; blocked/changed source responses are reported explicitly. No PDF/CBZ conversion.
 
 ## Stage 2 Renumbering

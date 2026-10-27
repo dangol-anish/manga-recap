@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import uuid
+import math
 
 import httpx
 from PIL import Image
@@ -26,6 +27,12 @@ lock = threading.RLock()
 active = None
 stop_event = threading.Event()
 thread = None
+
+
+class ExistingDownload(ValueError):
+    def __init__(self, ident):
+        self.ident = ident
+        super().__init__('These chapters already belong to an existing download. It is shown below. Use Resume to continue its unfinished chapters; verified images will be kept. Clearing history only hides downloads, it does not remove their files.')
 
 
 def base(): return storage.DATA / 'downloader'
@@ -45,6 +52,25 @@ def load(kind, ident):
 def save(job):
     job['updated_at'] = time.time()
     storage.write_json(record_path('jobs', job['id']), job)
+
+
+def cleared_history():
+    value = storage.read_json(base() / 'history.json')
+    if value is None: return {}
+    if not isinstance(value, dict) or any(not re.fullmatch(r'[a-f0-9]{32}', key) or not isinstance(stamp,(int,float)) or not math.isfinite(stamp) or stamp<0 for key,stamp in value.items()):
+        raise ValueError('Saved download history settings are invalid. Download records and manga files are intact; keep history.json for repair.')
+    return value
+
+
+def set_cleared(ident, cleared):
+    job = load('jobs', ident)
+    if cleared and (job.get('status') in ('running','stopping') or active and active['id']==ident):
+        raise FileExistsError('Stop this download before clearing it from the list. Saved images will be kept.')
+    history = cleared_history()
+    if cleared: history[ident] = time.time()
+    else: history.pop(ident, None)
+    storage.write_json(base() / 'history.json', history)
+    return {'id': ident, 'cleared': cleared, 'files_deleted': False}
 
 
 def destination(relative):
@@ -296,7 +322,7 @@ def start(job):
             owner = folder / '.download-owner.json'
             current = storage.read_json(owner)
             if current and current['job_id'] != job['id']:
-                raise ValueError('This chapter already has a download job. Resume that job in Recent downloads.')
+                raise ExistingDownload(current['job_id'])
             if not current and folder.exists() and any(folder.iterdir()): raise ValueError('Destination contains existing files. They were left unchanged.')
         for chapter in job['chapters']:
             folder = destination(chapter['folder'])
@@ -304,6 +330,7 @@ def start(job):
             if not (folder / '.download-owner.json').exists():
                 storage.write_json(folder / '.download-owner.json', {'job_id': job['id']})
         stop_event.clear()
+        if job['id'] in cleared_history(): set_cleared(job['id'], False)
         job.update(status='running', message='Loading selected chapter page lists…')
         save(job)
         active = {'id': job['id'], 'started': time.monotonic(), 'job': job}
@@ -332,7 +359,35 @@ async def catalog_api(body: SourceInput):
 @router.get('/jobs')
 def jobs_api():
     with lock:
-        return list(reversed(errors.job_list(base()/'jobs','downloader',summary)))
+        history = cleared_history()
+        return [{**job, 'cleared_at': history.get(job['id'])} for job in reversed(errors.job_list(base()/'jobs','downloader',summary))]
+
+
+@router.post('/history/clear')
+def clear_history_api():
+    with lock:
+        history = cleared_history(); count = 0
+        for job in errors.job_list(base()/'jobs','downloader',summary):
+            if not isinstance(job.get('id'),str) or not re.fullmatch(r'[a-f0-9]{32}',job['id']): continue
+            if job.get('status') in ('running','stopping') or active and active['id']==job['id']: continue
+            if job['id'] not in history: history[job['id']] = time.time(); count += 1
+        storage.write_json(base() / 'history.json', history)
+        return {'cleared': count, 'files_deleted': False}
+
+
+@router.post('/jobs/{ident}/clear')
+def clear_job_api(ident: str):
+    with lock:
+        try: return set_cleared(ident, True)
+        except FileExistsError as exc: raise HTTPException(409, str(exc))
+        except ValueError as exc: raise HTTPException(400, str(exc))
+
+
+@router.post('/jobs/{ident}/restore')
+def restore_job_api(ident: str):
+    with lock:
+        try: return set_cleared(ident, False)
+        except ValueError as exc: raise HTTPException(400, str(exc))
 
 
 @router.post('/jobs')
@@ -346,6 +401,8 @@ def new_api(body: DownloadInput):
                 if previous['catalog_id'] == body.catalog_id and {c['id'] for c in previous['chapters']} == set(body.chapter_ids):
                     return start(previous)
             return start(create(body.catalog_id, body.chapter_ids))
+    except ExistingDownload as exc:
+        raise HTTPException(409, str(exc), headers={'X-Existing-Download-ID': exc.ident})
     except FileExistsError as exc: raise HTTPException(409, str(exc))
     except ValueError as exc: raise HTTPException(400, str(exc))
 
@@ -353,6 +410,8 @@ def new_api(body: DownloadInput):
 @router.post('/jobs/{ident}/resume')
 def resume_api(ident: str):
     try: return start(load('jobs', ident))
+    except ExistingDownload as exc:
+        raise HTTPException(409, str(exc), headers={'X-Existing-Download-ID': exc.ident})
     except FileExistsError as exc: raise HTTPException(409, str(exc))
     except ValueError as exc: raise HTTPException(400, str(exc))
 

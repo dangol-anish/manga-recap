@@ -3,11 +3,15 @@ let catalog = null, selected = new Set(), jobs = [], busy = false, polling = fal
 let currentId = localStorage.getItem('downloader-job') || '';
 let folderBusy = false;
 let historySignature = '', resultsSignature = '';
+let showCleared = false;
+let selectionCleared = false;
+function listedJobs(){return jobs.filter(job=>showCleared||!job.cleared_at);}
+function selectVisible(){const visible=listedJobs();if(!visible.some(j=>j.id===currentId))currentId=selectionCleared?'':visible[0]?.id||'';localStorage.setItem('downloader-job',currentId);}
 function node(tag, text, className) {const n=document.createElement(tag); if(text!==undefined)n.textContent=text;if(className)n.className=className;return n;}
 async function api(path, body) {
   const response = await fetch('/api/downloader'+path, body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const result = await response.json();
-  if(!response.ok) throw new Error(typeof result.detail==='string'?result.detail:'Request failed. Please check your selection.');
+  if(!response.ok){const error=new Error(typeof result.detail==='string'?result.detail:result.detail?.message||'Request failed. Please check your selection.');error.existingJobId=response.headers?.get('X-Existing-Download-ID')||result.detail?.existing_job_id||result.existing_job_id;throw error;}
   return result;
 }
 function notice(text){$('#notice').textContent=text;}
@@ -30,7 +34,7 @@ function showCatalog(){
   });$('#chapter-list').append(fragment);updateSelection();
 }
 $('#source-form').addEventListener('submit',async event=>{
-  event.preventDefault();if(busy)return;busy=true;$('#load-button').disabled=true;$('#load-button').textContent='Loading…';notice('Loading manga details and chapters…');
+  event.preventDefault();if(busy)return;$('#source-form').parentNode.append($('#notice'));busy=true;$('#load-button').disabled=true;$('#load-button').textContent='Loading…';notice('Loading manga details and chapters…');
   try{catalog=await api('/catalog',{url:$('#source-url').value.trim()});selected=new Set();showCatalog();notice(`${catalog.chapters.length} chapters found. Select the chapters you want to download.`);}
   catch(error){notice(error.message);}
   finally{busy=false;$('#load-button').disabled=false;$('#load-button').textContent='Load chapters →';if(catalog)updateSelection();}
@@ -42,16 +46,32 @@ $('#apply-range').addEventListener('click',()=>{
   if(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start||end>catalog.chapters.length){notice(`Choose list positions between 1 and ${catalog.chapters.length}, with the last position at or after the first.`);return;}
   selected=new Set(catalog.chapters.slice(start-1,end).map(c=>c.id));updateSelection();notice(`Selected list positions ${start}–${end}.`);
 });
-function choose(id,scroll=false){currentId=id;localStorage.setItem('downloader-job',id);resultsSignature='';render();if(scroll)$('#progress-panel').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}
+function choose(id,scroll=false){selectionCleared=false;currentId=id;localStorage.setItem('downloader-job',id);resultsSignature='';render();if(scroll)$('#progress-panel').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}
 async function act(path,body={}){
-  if(busy)return;busy=true;$('#download-button').disabled=$('#resume-button').disabled=$('#stop-button').disabled=true;
+  if(busy)return;($('#catalog-panel').hidden?$('#progress-panel'):$('#catalog-panel')).append($('#notice'));notice('Sending your request…');busy=true;$('#download-button').disabled=$('#resume-button').disabled=$('#stop-button').disabled=true;
   try{const job=await api(path,body);currentId=job.id;localStorage.setItem('downloader-job',job.id);notice('');await refresh();}
-  catch(error){notice(error.message);}
+  catch(error){
+    if(error.existingJobId){
+      showCleared=true;$('#show-cleared').checked=true;selectionCleared=false;
+      await refresh();
+      if(jobs.some(job=>job.id===error.existingJobId))choose(error.existingJobId,true);
+    }
+    notice(error.message);
+  }
   finally{busy=false;render();}
 }
 $('#download-button').addEventListener('click',()=>act('/jobs',{catalog_id:catalog.id,chapter_ids:[...selected]}));
 $('#resume-button').addEventListener('click',()=>act(`/jobs/${currentId}/resume`));
 $('#stop-button').addEventListener('click',()=>act(`/jobs/${currentId}/stop`));
+async function clearRecord(path){
+  if(busy)return;busy=true;render();
+  try{await api(path,{});if(path.endsWith('/clear')){selectionCleared=true;currentId='';}await refresh();notice('List updated. Your manga files and saved progress are unchanged.');}
+  catch(error){notice(error.message);await refresh();}
+  finally{busy=false;render();}
+}
+$('#clear-job-button').addEventListener('click',()=>clearRecord(`/jobs/${currentId}/${jobs.find(j=>j.id===currentId)?.cleared_at?'restore':'clear'}`));
+$('#clear-history-button').addEventListener('click',()=>clearRecord('/history/clear'));
+$('#show-cleared').addEventListener('change',()=>{showCleared=$('#show-cleared').checked;selectionCleared=false;selectVisible();render();});
 $('#open-folder-button').addEventListener('click',async()=>{
   if(!currentId||folderBusy)return;folderBusy=true;$('#open-folder-button').disabled=true;
   try{await api(`/jobs/${currentId}/open-folder`,{});$('#folder-message').hidden=true;}
@@ -60,15 +80,20 @@ $('#open-folder-button').addEventListener('click',async()=>{
 });
 function duration(seconds){const s=Math.floor(seconds);return `${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`;}
 function render(){
-  const job=jobs.find(j=>j.id===currentId);
+  const visible=listedJobs(),job=visible.find(j=>j.id===currentId);
   $('#history-panel').hidden=!jobs.length;
-  const signature=JSON.stringify(jobs.map(j=>[j.id,j.status,j.verified_pages,j.total_pages]));
+  $('#show-cleared-label').hidden=!jobs.some(j=>j.cleared_at);
+  $('#clear-history-button').disabled=busy||!jobs.some(j=>!j.cleared_at&&!['running','stopping'].includes(j.status));
+  const signature=JSON.stringify([showCleared,visible.map(j=>[j.id,j.status,j.verified_pages,j.total_pages,j.cleared_at])]);
   if(signature!==historySignature){
     historySignature=signature;$('#history-list').replaceChildren();
-    for(const j of jobs){const button=node('button',undefined,'history-row');button.type='button';button.append(node('strong',j.title),node('span',`${j.verified_pages}/${j.total_pages} pages · ${j.status}`));button.addEventListener('click',()=>choose(j.id,true));$('#history-list').append(button);}
+    for(const j of visible){const button=node('button',undefined,'history-row');button.type='button';button.append(node('strong',j.title),node('span',`${j.verified_pages}/${j.total_pages} pages · ${j.cleared_at?'cleared':j.status}`));button.addEventListener('click',()=>choose(j.id,true));$('#history-list').append(button);}
+    if(!visible.length)$('#history-list').append(node('p','No downloads in this list.','muted'));
   }
   if(catalog)updateSelection();
   $('#progress-panel').hidden=!job;if(!job)return;
+  $('#clear-job-button').textContent=job.cleared_at?'Restore to list':'Clear from list';
+  $('#clear-job-button').disabled=busy||['running','stopping'].includes(job.status);
   $('#progress-title').textContent=job.title;$('#job-status').textContent=job.status;
   const planning=job.discovered_chapters<job.chapters.length;
   const percent=job.total_pages?Math.floor(job.verified_pages/job.total_pages*100):0;
@@ -94,5 +119,5 @@ function render(){
     }
   }
 }
-async function refresh(){if(polling)return;polling=true;try{jobs=await api('/jobs');const active=jobs.find(j=>['running','stopping'].includes(j.status));if(active&&active.id!==currentId)currentId=active.id;if(!jobs.some(j=>j.id===currentId))currentId=jobs[0]?.id||'';render();}catch(error){notice(`Connection interrupted. Saved pages are safe. ${error.message}`);}finally{polling=false;}}
+async function refresh(){if(polling)return;polling=true;try{jobs=await api('/jobs');const active=jobs.find(j=>['running','stopping'].includes(j.status));if(active&&active.id!==currentId)currentId=active.id;selectVisible();render();}catch(error){notice(`Connection interrupted. Saved pages are safe. ${error.message}`);}finally{polling=false;}}
 async function poll(){await refresh();setTimeout(poll,running()?1000:4000);}poll();

@@ -3,8 +3,8 @@
 <head><link rel="stylesheet" href="/static/errors.css?v=1"><script src="/static/errors.js?v=1" defer></script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Downloader · Manga Recap</title>
-<link rel="stylesheet" href="/static/sidebar.css?v=stages-5"><link rel="stylesheet" href="/static/downloader.css?v=cooldown-1">
-<script src="/static/downloader.js?v=cooldown-1" defer></script>
+<link rel="stylesheet" href="/static/sidebar.css?v=stages-5"><link rel="stylesheet" href="/static/downloader.css?v=history-1">
+<script src="/static/downloader.js?v=history-2" defer></script>
 <link rel="stylesheet" href="/static/workflow.css?v=1"><script src="/static/workflow.js?v=1" defer></script><link rel="stylesheet" href="/static/layout.css?v=1"><link rel="stylesheet" href="/static/controls.css?v=2"></head>
 <body class="with-stage-sidebar">
 <aside class="stage-sidebar" aria-label="Workflow stages">
@@ -26,7 +26,7 @@
 <div class="download-footer"><p class="muted">Saves numbered original images inside <code>manga/</code>.</p><button id="download-button" type="button" disabled>Download selected</button></div>
 </section>
 <section id="progress-panel" class="surface" hidden aria-labelledby="progress-title">
-<div class="section-head"><div><p class="overline">Current download</p><h2 id="progress-title"></h2></div><span class="job-status" id="job-status"></span></div>
+<div class="section-head"><div><p class="overline">Current download</p><h2 id="progress-title"></h2></div><div class="progress-actions"><span class="job-status" id="job-status"></span><button id="clear-job-button" class="secondary" type="button" title="Hide this record; keep manga files and saved progress">Clear from list</button></div></div>
 <div class="progress-heading"><strong id="progress-label">Loading page lists…</strong><span id="progress-percent"></span></div>
 <progress id="download-progress" max="100" aria-label="Verified page download progress"></progress>
 <div class="progress-meta"><span id="chapter-progress"></span><span id="elapsed"></span></div>
@@ -37,7 +37,7 @@
 <p id="folder-message" role="status" aria-live="polite" hidden></p>
 <p class="muted footnote">Progress is saved on disk. You can close this tab; stopping the server pauses the download. Panel detection starts separately.</p>
 </section>
-<section id="history-panel" hidden><div class="section-head history-heading"><h2>Recent downloads</h2><span class="muted">Saved on this computer</span></div><div id="history-list"></div></section>
+<section id="history-panel" hidden><div class="section-head history-heading"><h2>Recent downloads</h2><div class="history-actions"><label id="show-cleared-label" class="muted" hidden><input id="show-cleared" type="checkbox"> Show cleared</label><button id="clear-history-button" class="secondary" type="button">Clear history</button></div></div><p class="muted">Clearing the list keeps your manga files and saved progress.</p><div id="history-list"></div></section>
 <footer>MangaPill &amp; WeebCentral <span>Images only · no automatic detection</span></footer>
 </main>
 </body>

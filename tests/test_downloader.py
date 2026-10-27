@@ -157,6 +157,54 @@ class DownloadTests(unittest.TestCase):
         lists.assert_not_awaited();pages.assert_not_awaited()
         self.assertEqual(self.job['chapters'][0]['status'],'complete')
 
+    def test_clear_and_restore_keep_images_manifests_ownership_and_cooldown(self):
+        self.transfer();client=TestClient(app)
+        folder=d.destination(self.job['chapters'][0]['folder'])
+        storage.write_json(folder/'.download-owner.json',{'job_id':self.job['id']})
+        storage.write_json(requests.state_path(),{'hosts':{'mangapill.com':{'until':9999999999}}})
+        paths=[d.record_path('jobs',self.job['id']),folder/'001.png',folder/'002.png',folder/'.download-owner.json',requests.state_path()]
+        original={p:p.read_bytes() for p in paths}
+        response=client.post('/api/downloader/jobs/'+self.job['id']+'/clear')
+        self.assertEqual(response.status_code,200);self.assertFalse(response.json()['files_deleted'])
+        self.assertIsNotNone(client.get('/api/downloader/jobs').json()[0]['cleared_at'])
+        self.assertEqual(original,{p:p.read_bytes() for p in paths})
+        self.assertEqual(client.post('/api/downloader/jobs/'+self.job['id']+'/restore').status_code,200)
+        self.assertIsNone(client.get('/api/downloader/jobs').json()[0]['cleared_at'])
+        self.assertEqual(original,{p:p.read_bytes() for p in paths})
+
+    def test_clear_running_download_is_rejected_even_with_stale_paused_record(self):
+        import time
+        d.active={'id':self.job['id'],'started':time.monotonic()}
+        response=TestClient(app).post('/api/downloader/jobs/'+self.job['id']+'/clear')
+        self.assertEqual(response.status_code,409)
+        self.assertFalse(d.cleared_history())
+
+    def test_clear_history_skips_active_job_and_persists_across_reload(self):
+        import time
+        self.catalog['chapters'].append({'id':'c2','name':'Chapter 2','url':'https://mangapill.com/chapters/c2'})
+        storage.write_json(d.record_path('catalogs',self.catalog['id']),self.catalog)
+        other=d.create(self.catalog['id'],['c2'])
+        d.active={'id':self.job['id'],'started':time.monotonic()}
+        response=TestClient(app).post('/api/downloader/history/clear')
+        self.assertEqual(response.json()['cleared'],1)
+        self.assertNotIn(self.job['id'],d.cleared_history());self.assertIn(other['id'],d.cleared_history())
+        self.assertEqual(TestClient(app).post('/api/downloader/history/clear').json()['cleared'],0)
+
+    def test_bad_record_filename_does_not_poison_history_settings(self):
+        bad=d.base()/'jobs/bad.json';bad.write_text('{broken')
+        response=TestClient(app).post('/api/downloader/history/clear')
+        self.assertEqual(response.status_code,200)
+        self.assertNotIn('bad',d.cleared_history())
+        self.assertEqual(bad.read_text(),'{broken')
+
+    def test_explicit_resume_restores_cleared_job_without_changing_ownership(self):
+        d.set_cleared(self.job['id'],True)
+        with patch('app.tasks.ensure_idle'),patch.object(d.threading,'Thread') as worker:
+            response=d.start(d.load('jobs',self.job['id']))
+        self.assertEqual(response['status'],'running');self.assertNotIn(self.job['id'],d.cleared_history())
+        self.assertEqual(storage.read_json(d.destination(self.job['chapters'][0]['folder'])/'.download-owner.json')['job_id'],self.job['id'])
+        worker.return_value.start.assert_called_once()
+
     def test_only_incomplete_chapters_reload_and_completed_images_stay_unchanged(self):
         self.transfer();c=self.job['chapters'][0]
         before={p['file']:d.destination(c['folder']+'/'+p['file']).stat().st_mtime_ns for p in c['pages']}
@@ -264,6 +312,22 @@ class DownloadTests(unittest.TestCase):
         folder=d.destination(self.job['chapters'][0]['folder']);folder.mkdir(parents=True)
         storage.write_json(folder/'.download-owner.json',{'job_id':'b'*32})
         with self.assertRaises(ValueError):d.start(self.job)
+        self.assertIsNone(d.active)
+
+    def test_selection_conflict_identifies_hidden_owner_without_downloading(self):
+        owner=d.create(self.catalog['id'],['c1'])
+        folder=d.destination(owner['chapters'][0]['folder']);folder.mkdir(parents=True)
+        storage.write_json(folder/'.download-owner.json',{'job_id':owner['id']})
+        image=folder/'001.png';image.write_bytes(png())
+        before=image.read_bytes()
+        d.set_cleared(owner['id'],True)
+        with patch.object(d.threading,'Thread') as worker:
+            response=TestClient(app).post('/api/downloader/jobs',json={'catalog_id':self.catalog['id'],'chapter_ids':['c1']})
+        self.assertEqual(response.status_code,409)
+        self.assertEqual(response.headers['X-Existing-Download-ID'],owner['id'])
+        self.assertIn('Use Resume',response.json()['detail'])
+        worker.assert_not_called()
+        self.assertEqual(image.read_bytes(),before)
         self.assertIsNone(d.active)
 
     def test_stop_saves_active_object_and_resumes_after_failure(self):
