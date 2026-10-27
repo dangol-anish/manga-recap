@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Downloader · Manga Recap</title>
 <link rel="stylesheet" href="/static/sidebar.css?v=stages-5"><link rel="stylesheet" href="/static/downloader.css?v=history-1">
-<script src="/static/downloader.js?v=history-2" defer></script>
+<script src="/static/downloader.js?v=selection-reuse-1" defer></script>
 <link rel="stylesheet" href="/static/workflow.css?v=1"><script src="/static/workflow.js?v=1" defer></script><link rel="stylesheet" href="/static/layout.css?v=1"><link rel="stylesheet" href="/static/controls.css?v=2"></head>
 <body class="with-stage-sidebar">
 <aside class="stage-sidebar" aria-label="Workflow stages">
@@ -23,7 +23,7 @@
 <div class="section-head"><div><p class="overline" id="source-name"></p><h2 id="manga-title"></h2></div><span class="count" id="selection-count"></span></div>
 <div class="chapter-tools"><div><button class="quiet" id="select-all" type="button">Select all</button><button class="quiet" id="clear-selection" type="button">Clear</button></div><div class="range"><label for="range-start">List positions</label><input id="range-start" type="number" min="1" value="1" aria-label="First chapter list position"><span>–</span><input id="range-end" type="number" min="1" value="1" aria-label="Last chapter list position"><button class="quiet" id="apply-range" type="button">Select range</button></div></div>
 <div id="chapter-list" class="chapter-list"></div>
-<div class="download-footer"><p class="muted">Saves numbered original images inside <code>manga/</code>.</p><button id="download-button" type="button" disabled>Download selected</button></div>
+<div class="download-footer"><p class="muted">Only selected chapters. Reuses verified images and downloads missing pages into <code>manga/</code>.</p><button id="download-button" type="button" disabled>Download selected</button></div>
 </section>
 <section id="progress-panel" class="surface" hidden aria-labelledby="progress-title">
 <div class="section-head"><div><p class="overline">Current download</p><h2 id="progress-title"></h2></div><div class="progress-actions"><span class="job-status" id="job-status"></span><button id="clear-job-button" class="secondary" type="button" title="Hide this record; keep manga files and saved progress">Clear from list</button></div></div>

@@ -314,21 +314,92 @@ class DownloadTests(unittest.TestCase):
         with self.assertRaises(ValueError):d.start(self.job)
         self.assertIsNone(d.active)
 
-    def test_selection_conflict_identifies_hidden_owner_without_downloading(self):
-        owner=d.create(self.catalog['id'],['c1'])
-        folder=d.destination(owner['chapters'][0]['folder']);folder.mkdir(parents=True)
-        storage.write_json(folder/'.download-owner.json',{'job_id':owner['id']})
-        image=folder/'001.png';image.write_bytes(png())
-        before=image.read_bytes()
-        d.set_cleared(owner['id'],True)
-        with patch.object(d.threading,'Thread') as worker:
-            response=TestClient(app).post('/api/downloader/jobs',json={'catalog_id':self.catalog['id'],'chapter_ids':['c1']})
-        self.assertEqual(response.status_code,409)
-        self.assertEqual(response.headers['X-Existing-Download-ID'],owner['id'])
-        self.assertIn('Use Resume',response.json()['detail'])
-        worker.assert_not_called()
-        self.assertEqual(image.read_bytes(),before)
+    def test_selected_subset_reuses_hidden_downloads_and_fetches_only_missing_pages(self):
+        self.catalog['chapters'] = [
+            {'id':f'c{i}','name':f'Chapter {i}','url':f'https://mangapill.com/chapters/c{i}'}
+            for i in range(1,5)]
+        storage.write_json(d.record_path('catalogs',self.catalog['id']),self.catalog)
+        self.job=d.create(self.catalog['id'],['c1','c2','c3'])
+        with patch.object(d.threading,'Thread'):
+            d.start(self.job)
+        d.active=None
+        self.job['status']='paused'
+        self.transfer()
+        old_manifest=d.record_path('jobs',self.job['id']).read_bytes()
+        old_chapters=self.job['chapters']
+        # A completed, an unselected, and a partially missing chapter.
+        missing=d.destination(old_chapters[2]['folder']+'/002.png');missing.unlink()
+        untouched=[d.destination(old_chapters[0]['folder']+'/001.png'),
+                   d.destination(old_chapters[1]['folder']+'/001.png'),
+                   d.destination(old_chapters[1]['folder'])/'.download-owner.json']
+        before=[(p.read_bytes(),p.stat().st_mtime_ns) for p in untouched]
+        d.set_cleared(self.job['id'],True)
+        with patch.object(d.threading,'Thread'):
+            response=TestClient(app).post('/api/downloader/jobs',json={
+                'catalog_id':self.catalog['id'],'chapter_ids':['c4','c1','c3']})
+        self.assertEqual(response.status_code,200,response.text)
+        selected=d.load('jobs',response.json()['id'])
+        self.assertEqual([c['id'] for c in selected['chapters']],['c1','c3','c4'])
+        d.active=None
+        with patch.object(s,'image_urls',AsyncMock(return_value=self.urls)) as lists,patch.object(s,'fetch',AsyncMock(return_value=png())) as pages:
+            asyncio.run(d.transfer(selected))
+        self.assertEqual([c.args[1]['id'] for c in lists.await_args_list],['c3','c4'])
+        self.assertEqual(pages.await_count,3,'One missing cached page and two new pages only')
+        self.assertTrue(all(c['status']=='complete' for c in selected['chapters']))
+        self.assertEqual(before,[(p.read_bytes(),p.stat().st_mtime_ns) for p in untouched])
+        self.assertEqual(d.record_path('jobs',self.job['id']).read_bytes(),old_manifest)
+        self.assertIn(self.job['id'],d.cleared_history(),'Do not restore the whole older selection')
+        # Resuming the older record also reads the latest shared chapter state.
+        with patch.object(d.threading,'Thread'):
+            d.start(d.load('jobs',self.job['id']))
+        resumed=d.load('jobs',self.job['id']);d.active=None
+        with patch.object(s,'image_urls',AsyncMock()) as lists,patch.object(s,'fetch',AsyncMock()) as pages:
+            asyncio.run(d.transfer(resumed))
+        lists.assert_not_awaited();pages.assert_not_awaited()
+
+    def test_reuse_rejects_different_release_and_preflights_all_chapters(self):
+        folder=d.destination(self.job['chapters'][0]['folder']);folder.mkdir(parents=True)
+        storage.write_json(folder/'.download-owner.json',{'job_id':self.job['id']})
+        owner_before=(folder/'.download-owner.json').read_bytes()
+        other=d.create(self.catalog['id'],['c1'])
+        other['chapters'][0]['url']='https://mangapill.com/chapters/other-release'
+        with self.assertRaisesRegex(ValueError,'different source or release'):
+            d.start(other)
+        self.assertEqual((folder/'.download-owner.json').read_bytes(),owner_before)
         self.assertIsNone(d.active)
+
+    def test_selection_reuses_chapters_from_multiple_previous_jobs(self):
+        self.catalog['chapters'].append({'id':'c2','name':'Chapter 2','url':'https://mangapill.com/chapters/c2'})
+        storage.write_json(d.record_path('catalogs',self.catalog['id']),self.catalog)
+        owners=[]
+        for ident in ('c1','c2'):
+            self.job=d.create(self.catalog['id'],[ident])
+            folder=d.destination(self.job['chapters'][0]['folder']);folder.mkdir(parents=True)
+            storage.write_json(folder/'.download-owner.json',{'job_id':self.job['id']})
+            self.transfer();owners.append(self.job['id'])
+        with patch.object(d.threading,'Thread'):
+            response=TestClient(app).post('/api/downloader/jobs',json={'catalog_id':self.catalog['id'],'chapter_ids':['c2','c1']})
+        self.assertEqual(response.status_code,200,response.text)
+        selected=d.load('jobs',response.json()['id']);d.active=None
+        with patch.object(s,'image_urls',AsyncMock()) as lists,patch.object(s,'fetch',AsyncMock()) as pages:
+            asyncio.run(d.transfer(selected))
+        lists.assert_not_awaited();pages.assert_not_awaited()
+        self.assertEqual([c['id'] for c in selected['chapters']],['c1','c2'])
+        for chapter,owner in zip(selected['chapters'],owners):
+            state=storage.read_json(d.destination(chapter['folder'])/'.download-owner.json')
+            self.assertEqual(state['job_id'],owner)
+            self.assertEqual(state['state_job_id'],selected['id'])
+        # Cleaning either chapter must reject the whole request before claims.
+        marker=d.destination(selected['chapters'][1]['folder'])/'.renumbering.json'
+        marker.write_text('{}')
+        first_owner=d.destination(selected['chapters'][0]['folder'])/'.download-owner.json'
+        before=first_owner.read_bytes()
+        with patch.object(d.threading,'Thread') as worker:
+            response=TestClient(app).post('/api/downloader/jobs',json={'catalog_id':self.catalog['id'],'chapter_ids':['c1','c2']})
+        self.assertEqual(response.status_code,400)
+        self.assertIn('renumbered',response.json()['detail'])
+        self.assertEqual(first_owner.read_bytes(),before)
+        worker.assert_not_called()
 
     def test_stop_saves_active_object_and_resumes_after_failure(self):
         import time

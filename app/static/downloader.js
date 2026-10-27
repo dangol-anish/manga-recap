@@ -11,7 +11,7 @@ function node(tag, text, className) {const n=document.createElement(tag); if(tex
 async function api(path, body) {
   const response = await fetch('/api/downloader'+path, body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const result = await response.json();
-  if(!response.ok){const error=new Error(typeof result.detail==='string'?result.detail:result.detail?.message||'Request failed. Please check your selection.');error.existingJobId=response.headers?.get('X-Existing-Download-ID')||result.detail?.existing_job_id||result.existing_job_id;throw error;}
+  if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:'Request failed. Please check your selection.');
   return result;
 }
 function notice(text){$('#notice').textContent=text;}
@@ -50,14 +50,7 @@ function choose(id,scroll=false){selectionCleared=false;currentId=id;localStorag
 async function act(path,body={}){
   if(busy)return;($('#catalog-panel').hidden?$('#progress-panel'):$('#catalog-panel')).append($('#notice'));notice('Sending your request…');busy=true;$('#download-button').disabled=$('#resume-button').disabled=$('#stop-button').disabled=true;
   try{const job=await api(path,body);currentId=job.id;localStorage.setItem('downloader-job',job.id);notice('');await refresh();}
-  catch(error){
-    if(error.existingJobId){
-      showCleared=true;$('#show-cleared').checked=true;selectionCleared=false;
-      await refresh();
-      if(jobs.some(job=>job.id===error.existingJobId))choose(error.existingJobId,true);
-    }
-    notice(error.message);
-  }
+  catch(error){notice(error.message);}
   finally{busy=false;render();}
 }
 $('#download-button').addEventListener('click',()=>act('/jobs',{catalog_id:catalog.id,chapter_ids:[...selected]}));

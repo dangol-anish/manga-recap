@@ -29,12 +29,6 @@ stop_event = threading.Event()
 thread = None
 
 
-class ExistingDownload(ValueError):
-    def __init__(self, ident):
-        self.ident = ident
-        super().__init__('These chapters already belong to an existing download. It is shown below. Use Resume to continue its unfinished chapters; verified images will be kept. Clearing history only hides downloads, it does not remove their files.')
-
-
 def base(): return storage.DATA / 'downloader'
 
 
@@ -316,19 +310,33 @@ def start(job):
         for chapter in job['chapters']:
             if (destination(chapter['folder']) / '.renumbering.json').exists():
                 raise ValueError('This chapter has been cleaned or renumbered. Download resume is disabled to protect your edits.')
-        # Preflight every destination before claiming any folders.
+        # A folder keeps its original owner, plus a pointer to the latest saved
+        # chapter state. Different selections can reuse it without broadening
+        # the selection or rewriting historical jobs.
+        claims = []
+        hydrated = []
         for chapter in job['chapters']:
             folder = destination(chapter['folder'])
             owner = folder / '.download-owner.json'
             current = storage.read_json(owner)
-            if current and current['job_id'] != job['id']:
-                raise ExistingDownload(current['job_id'])
+            cached = deepcopy(chapter)
+            if current:
+                donor = load('jobs', current.get('state_job_id', current['job_id']))
+                matches = [c for c in donor['chapters'] if c['id']==chapter['id'] and c['folder']==chapter['folder'] and c['url']==chapter['url']]
+                if donor['catalog_id'] != job['catalog_id'] or len(matches)!=1:
+                    raise ValueError('This chapter folder belongs to a different source or release. Existing files were kept; select the original release or use another destination.')
+                cached = deepcopy(matches[0])
             if not current and folder.exists() and any(folder.iterdir()): raise ValueError('Destination contains existing files. They were left unchanged.')
-        for chapter in job['chapters']:
+            hydrated.append(cached)
+            claims.append(current or {'job_id':job['id']})
+        job['chapters'] = hydrated
+        # Save the reusable snapshot before publishing a pointer to it. A crash
+        # between claims leaves every pointer referring to a complete record.
+        save(job)
+        for chapter, claim in zip(job['chapters'], claims):
             folder = destination(chapter['folder'])
             folder.mkdir(parents=True, exist_ok=True)
-            if not (folder / '.download-owner.json').exists():
-                storage.write_json(folder / '.download-owner.json', {'job_id': job['id']})
+            storage.write_json(folder / '.download-owner.json', {**claim, 'state_job_id':job['id']})
         stop_event.clear()
         if job['id'] in cleared_history(): set_cleared(job['id'], False)
         job.update(status='running', message='Loading selected chapter page lists…')
@@ -396,13 +404,9 @@ def new_api(body: DownloadInput):
     try:
         with task_lock, lock:
             ensure_idle()
-            for path in (base() / 'jobs').glob('*.json'):
-                previous = storage.read_json(path)
-                if previous['catalog_id'] == body.catalog_id and {c['id'] for c in previous['chapters']} == set(body.chapter_ids):
-                    return start(previous)
+            # Always snapshot exactly this selection. Chapter state comes from
+            # each folder's latest saved download, including cleared history.
             return start(create(body.catalog_id, body.chapter_ids))
-    except ExistingDownload as exc:
-        raise HTTPException(409, str(exc), headers={'X-Existing-Download-ID': exc.ident})
     except FileExistsError as exc: raise HTTPException(409, str(exc))
     except ValueError as exc: raise HTTPException(400, str(exc))
 
@@ -410,8 +414,6 @@ def new_api(body: DownloadInput):
 @router.post('/jobs/{ident}/resume')
 def resume_api(ident: str):
     try: return start(load('jobs', ident))
-    except ExistingDownload as exc:
-        raise HTTPException(409, str(exc), headers={'X-Existing-Download-ID': exc.ident})
     except FileExistsError as exc: raise HTTPException(409, str(exc))
     except ValueError as exc: raise HTTPException(400, str(exc))
 
