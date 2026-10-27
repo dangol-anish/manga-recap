@@ -1,0 +1,91 @@
+/* Shared rhythm and responsive layout. Page-specific grids remain local. */
+html[data-theme="dark"] {
+  --onyx: #131515;
+  --graphite: #2b2c28;
+  --verdigris: #339989;
+  --aqua: #7de2d1;
+  --snow: #fffafb;
+  --ink: #fffafb;
+  --green: #7de2d1;
+  --paper: #131515;
+  --muted: #fffafb99;
+  --line: #fffafb1a;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+}
+html[data-theme="dark"] body {
+  background: var(--onyx);
+  color: var(--snow);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+html[data-theme="dark"] body.with-stage-sidebar main {
+  max-width: 1080px;
+  min-width: 0;
+  padding: 48px 40px 32px;
+}
+html[data-theme="dark"] .with-stage-sidebar main > header {
+  gap: 24px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+html[data-theme="dark"] .with-stage-sidebar h1 { font-size: 32px; line-height: 1.25; }
+html[data-theme="dark"] .with-stage-sidebar .surface {
+  padding: 24px;
+  margin-bottom: 24px;
+  border-radius: 14px;
+}
+html[data-theme="dark"] .with-stage-sidebar .section-head {
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+html[data-theme="dark"] .with-stage-sidebar .surface h2 { font-size: 18px; line-height: 26px; margin: 0; }
+html[data-theme="dark"] .with-stage-sidebar .section-head .muted { margin: 6px 0 0; line-height: 1.75; }
+html[data-theme="dark"] .with-stage-sidebar .group-grid { gap: 24px; margin-top: 24px; }
+html[data-theme="dark"] .with-stage-sidebar .group-explanation { font-size: 13px; line-height: 1.75; }
+html[data-theme="dark"] :is(.group-grid,.story-selectors,.shorts-fields,.workflow-pickers,.quality-picker,.preview-picker,.import-toolbar) > div { min-width: 0; }
+html[data-theme="dark"] .with-stage-sidebar :is(.group-selection-head,.batch-work .batch-tools,.shorts-tools) { gap: 16px; flex-wrap: wrap; }
+html[data-theme="dark"] :is(.surface,.idea,.group-chapter,.batch-option,.shorts-chapter) { overflow-wrap: anywhere; }
+html[data-theme="dark"] :is(.check-label,.storage-check,.group-chapter,.batch-option,.shorts-chapter) { min-width: 0; }
+html[data-theme="dark"] .with-stage-sidebar footer { gap: 16px; flex-wrap: wrap; line-height: 1.75; }
+html[data-theme="dark"] dialog { color: var(--snow); background: var(--graphite); border-color: var(--line); }
+html[data-theme="dark"] dialog::backdrop { background: #131515b3; }
+/* Retained compatibility pages use the same palette, without changing images/canvas. */
+html[data-theme="dark"] body:not(.with-stage-sidebar) :is(.add,.manga,.controls,.beat,.batch,.import-panel,.editor,.export,.page-card,article) {
+  background: linear-gradient(135deg,#2b2c288f,#2b2c284d);
+  border-color: var(--line);
+  border-radius: 14px;
+}
+html[data-theme="dark"] body:not(.with-stage-sidebar) :is(.manga-head,#panel-list li) { background: #2b2c2870; }
+html[data-theme="dark"] body:not(.with-stage-sidebar) :is(.download,.badge.imported,#panel-list li.selected) { background: #3399891a; color: var(--aqua); }
+html[data-theme="dark"] body:not(.with-stage-sidebar) :is(.page-card img,.timing img,#canvas-frame) { background: var(--onyx); }
+html[data-theme="dark"] body:not(.with-stage-sidebar) :is(#notice,#model-status,.page-card .reasons,#editor-flags,#alignment-errors) { color: var(--aqua); }
+@media(max-width:760px) {
+  html[data-theme="dark"] body.with-stage-sidebar main { padding: 28px 20px; }
+  html[data-theme="dark"] .with-stage-sidebar .surface { padding: 20px; }
+  html[data-theme="dark"] .with-stage-sidebar main > header { gap: 16px; margin-bottom: 24px; }
+  html[data-theme="dark"] .with-stage-sidebar .group-grid { gap: 16px; }
+}
+@media(max-width:480px) {
+  html[data-theme="dark"] body.with-stage-sidebar main { padding: 24px 16px; }
+  html[data-theme="dark"] .with-stage-sidebar .surface { padding: 16px; }
+  html[data-theme="dark"] .with-stage-sidebar h1 { font-size: 28px; }
+  html[data-theme="dark"] .with-stage-sidebar :is(.group-selection-head,.batch-tools,.quality-picker) { align-items: stretch; flex-direction: column; }
+  html[data-theme="dark"] .with-stage-sidebar .group-selection-head > button { width: 100%; }
+}
+@media(prefers-reduced-transparency:reduce) {
+  html[data-theme="dark"] :is(.surface,.idea,.chapter-progress,.stage-sidebar) { backdrop-filter:none; -webkit-backdrop-filter:none; background:var(--graphite); }
+}
+html[data-theme="dark"] body { font-size: 14px; line-height: 1.5; }
+html[data-theme="dark"] body:not(.with-stage-sidebar) main { max-width:1080px; padding:48px 40px 32px; }
+html[data-theme="dark"] body:not(.with-stage-sidebar) h1 { font-size:32px; line-height:1.25; }
+html[data-theme="dark"] body:not(.with-stage-sidebar) h2 { font-size:18px; line-height:26px; }
+html[data-theme="dark"] body:not(.with-stage-sidebar) .mark { color:var(--onyx); }
+html[data-theme="dark"] body:not(.with-stage-sidebar) .page-card.flagged { border-color:var(--verdigris); }
+html[data-theme="dark"] body:not(.with-stage-sidebar) .page-card.flagged .tag { color:var(--aqua); }
+@media(max-width:760px){html[data-theme="dark"] body:not(.with-stage-sidebar) main{padding:28px 20px;}}
+@media(max-width:480px){html[data-theme="dark"] body:not(.with-stage-sidebar) main{padding:24px 16px;}}
+html[data-theme="dark"] .surface {color:#fffafb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;}
+html[data-theme="dark"] body:not(.with-stage-sidebar) .import-panel details pre {background:#13151580;color:#fffafb;border:1px solid #fffafb1a;border-radius:8px;}

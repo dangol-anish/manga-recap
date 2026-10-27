@@ -22,3 +22,133 @@ html[data-theme="dark"] select:not([multiple])[size="1"] {
     background-image: none;
   }
 }
+
+/* One control foundation for static pages and dynamically inserted fields.
+   Page CSS owns layout/width; this sheet, loaded last, owns control geometry. */
+html {
+  --mr-control-height: 44px;
+  --mr-control-radius: 8px;
+  --mr-control-font-size: 13px;
+  --mr-control-gap: 8px;
+  --mr-control-surface: #131515b3;
+  --mr-control-border: #fffafb26;
+  --mr-control-text: #fffafb;
+  --mr-control-muted: #fffafb99;
+  --mr-control-accent: #7de2d1;
+}
+html[data-theme="dark"] { color-scheme: dark; }
+html[data-theme="dark"] select:not([multiple]):not([size]),
+html[data-theme="dark"] select:not([multiple])[size="1"] {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--mr-control-height, 44px);
+  min-height: var(--mr-control-height, 44px);
+  margin: 0;
+  padding-block: 10px;
+  padding-inline-start: 13px;
+  padding-inline-end: 44px;
+  border: 1px solid var(--mr-control-border, #fffafb26);
+  border-radius: var(--mr-control-radius, 8px);
+  background-color: var(--mr-control-surface, #131515b3);
+  color: var(--mr-control-text, #fffafb);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--mr-control-font-size, 13px);
+  font-weight: 400;
+  line-height: 22px;
+  box-shadow: inset 0 1px 0 #fffafb05;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+html[data-theme="dark"] select option,
+html[data-theme="dark"] select optgroup {
+  background-color: #131515;
+  color: #fffafb;
+}
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="color"]),
+html[data-theme="dark"] textarea {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--mr-control-height, 44px);
+  border: 1px solid var(--mr-control-border, #fffafb26);
+  border-radius: var(--mr-control-radius, 8px);
+  background-color: var(--mr-control-surface, #131515b3);
+  color: var(--mr-control-text, #fffafb);
+  padding: 10px 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--mr-control-font-size, 13px);
+  line-height: 22px;
+}
+html[data-theme="dark"] textarea { resize: vertical; }
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder { color: #fffafb66; opacity: 1; }
+html[data-theme="dark"] input[type="checkbox"],
+html[data-theme="dark"] input[type="radio"] {
+  box-sizing: border-box;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--mr-control-accent, #7de2d1);
+}
+html[data-theme="dark"] button,
+html[data-theme="dark"] .button-link,
+html[data-theme="dark"] .download-link {
+  box-sizing: border-box;
+  min-height: var(--mr-control-height, 44px);
+  border-radius: var(--mr-control-radius, 8px);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--mr-control-font-size, 13px);
+  line-height: 20px;
+  padding-block: 11px;
+}
+html[data-theme="dark"] label[for] {
+  display: block;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--mr-control-muted, #fffafb99);
+  margin-bottom: var(--mr-control-gap, 8px);
+}
+html[data-theme="dark"] label:has(> select) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mr-control-gap, 8px);
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+html[data-theme="dark"] label > select { margin-top: 0; }
+html[data-theme="dark"] :is(select, input, textarea):hover:not(:disabled):not([readonly]) {
+  border-color: #7de2d14d;
+}
+html[data-theme="dark"] :is(select, input, textarea, button, a, summary):focus-visible {
+  outline: 2px solid var(--mr-control-accent, #7de2d1);
+  outline-offset: 3px;
+}
+html[data-theme="dark"] :is(select, input, textarea, button):disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+html[data-theme="dark"] select:disabled { background-color: #13151580; }
+html[data-theme="dark"] :is(input, textarea)[readonly] { cursor: text; }
+@media (forced-colors: active) {
+  html[data-theme="dark"] :is(select, input, textarea, button) {
+    forced-color-adjust: auto;
+    box-shadow: none;
+  }
+  html[data-theme="dark"] select:not([multiple]):not([size]),
+  html[data-theme="dark"] select:not([multiple])[size="1"] {
+    -webkit-appearance: auto;
+    appearance: auto;
+    background-image: none;
+    background-color: Canvas;
+    color: CanvasText;
+    border-color: ButtonText;
+  }
+  html[data-theme="dark"] :is(select, input, textarea, button):focus-visible { outline-color: Highlight; }
+}

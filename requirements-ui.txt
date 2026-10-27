@@ -1,0 +1,2 @@
+# Optional development-only browser layout tests; not required to run the app.
+playwright==1.64.1

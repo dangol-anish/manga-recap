@@ -46,3 +46,7 @@ Run the shared complete command before delivering the change. `git diff --check`
 ## Documentation map
 
 The README is the short starting point; `WORKFLOW.md` owns detailed stage behavior. Focused guides own memory, audio, video review, Shorts and backup/recovery. Keep labels/defaults consistent with the actual page and frozen-job semantics; new defaults must not be described as changes to existing recordings. The Windows audit is historical verification context, not a substitute for current CI or local platform testing.
+
+## Browser layout regression checks
+
+See [Shared UI standards](UI_STANDARDS.md) for development-only browser setup, isolated 17-page layout checks and CI screenshots. The app's runtime/install requirements are unchanged. These browser checks complement the regular Python and JavaScript control tests; they use no saved manga, recordings, videos or Shorts.
