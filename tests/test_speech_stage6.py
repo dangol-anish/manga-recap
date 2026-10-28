@@ -45,6 +45,19 @@ class SpeechTests(unittest.TestCase):
         words=[{'text':text[a:b],'char_start':a,'char_end':b,'start':i*.2,'end':i*.2+.15,'raw_start':i*.2,'raw_end':i*.2+.15} for i,(_,a,b) in enumerate(alignment.script_tokens(text))]
         return {'words':words,'duration':duration,'removed_silence':[],'sentence_pauses':1}
 
+    def test_natural_pause_advisory_is_saved_without_blocking_chapter(self):
+        warning={'code':'natural_period_pause','start':.2,'end':.5,'message':'Natural pause kept.'}
+        def speech_with_advisory(*args,**kwargs):
+            result=self.fake_speech(*args,**kwargs)
+            result['pause_warnings']=[warning]
+            return result
+        with patch.object(speech.alignment,'speech',side_effect=speech_with_advisory):
+            current=self.generate()
+        self.assertEqual(current['ready'],current['spoken'])
+        self.assertEqual(current['job']['status'],'complete')
+        self.assertTrue(current['full']['ready'])
+        self.assertTrue(all(b['pause_warnings']==[warning] for b in current['beats']))
+
     def current(self):return speech.status(self.mid,self.chapter)
 
     def finish(self):
@@ -63,7 +76,7 @@ class SpeechTests(unittest.TestCase):
         response=self.client.get(self.speech_api);self.assertEqual(response.status_code,200)
         s=response.json();self.assertEqual(len(s['beats']),2);self.assertEqual(s['ready'],0)
         self.assertEqual(s['voice'],'en-US-BrianMultilingualNeural')
-        self.assertEqual(s['pacing'],{'rate':'+20%','speed':1.2,'sentence_pause':.18})
+        self.assertEqual(s['pacing'],{'rate':'+10%','speed':1.1,'sentence_pause':.18})
         self.assertEqual(self.said,[]);self.assertFalse(speech.root(self.mid,self.chapter).exists())
         self.assertEqual(story.state_path(self.mid).read_bytes(),before)
         self.assertEqual(self.client.get('/api/speech/catalog').json()[0]['chapters'][0]['audio_ready'],True)

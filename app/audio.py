@@ -16,7 +16,7 @@ from app import narration, storage
 # Preserve the legacy pipeline's voice; rebuilt Stage 6 uses DEFAULT_VOICE.
 VOICE = 'en-US-AndrewMultilingualNeural'
 DEFAULT_VOICE = 'en-US-BrianMultilingualNeural'
-DEFAULT_PACING={'rate':'+20%','speed':1.2,'sentence_pause':.18}
+DEFAULT_PACING={'rate':'+10%','speed':1.1,'sentence_pause':.18}
 # Base trimming profile; approved per-chapter speed/period pauses live in pacing.json.
 PAUSE_PROFILE = 'pcm-rms-v1:threshold=-45dB:min-gap=0.20:keep=0.10:window=0.01'
 lock = threading.RLock()
@@ -86,7 +86,7 @@ def status(manga_id, chapter):
                 'spoken': sum(not b['silent'] for b in current), 'job': dict(job)}
 
 
-def shorten_pauses(target, sentence_boundaries=None, sentence_pause=.18):
+def shorten_pauses(target, sentence_boundaries=None, sentence_pause=.18, *, warnings=None):
     """Trim measured quiet runs; optionally retain or insert a brief period pause."""
     import numpy as np
     executable = shutil.which('ffmpeg')
@@ -116,7 +116,13 @@ def shorten_pauses(target, sentence_boundaries=None, sentence_pause=.18):
             candidates = [(int(b-a), i) for i, (a,b) in enumerate(zip(starts,ends))
                           if a/24000 >= boundary['start']-.02 and b/24000 <= boundary['end']+.08]
             if not candidates:
-                raise ValueError('No safe quiet gap found after a period; previous audio retained.')
+                # Word timestamps do not guarantee acoustic silence (for example
+                # after abbreviations or continuously spoken sentences). Never
+                # cut speech or reject a usable recording to enforce a pause.
+                if warnings is not None:
+                    warnings.append({'code':'natural_period_pause','start':boundary['start'],
+                        'end':boundary['end'],'message':'Natural pause kept after a period because no safe silent gap was detected. No extra silence was inserted.'})
+                continue
             sentence_runs.add(max(candidates)[1])
         pieces = []
         removed = []

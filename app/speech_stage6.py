@@ -137,7 +137,8 @@ def status(mid,chapter):
         for beat in current['beats']:
             clip=clips.get(beat['token'],{});ready=not beat['silent'] and valid_clip(mid,chapter,beat,clip)
             beat.update(ready=ready,duration=clip['duration'] if ready else None,file=clip['file'] if ready else None,
-                        timing_anchors=clip.get('timing_anchors',[]) if ready else [])
+                        timing_anchors=clip.get('timing_anchors',[]) if ready else [],
+                        pause_warnings=clip.get('pause_warnings',[]) if ready else [])
         job=next((j for j in jobs() if j['manga_id']==mid and j['chapter']==chapter),None)
         current.update(ready=sum(b['ready'] for b in current['beats']),spoken=sum(not b['silent'] for b in current['beats']),
                        duration=sum(b['duration'] or 0 for b in current['beats']),job=job,busy=active is not None)
@@ -214,7 +215,8 @@ def generate_one(mid,chapter,beat,source_revision):
         if abs(duration-spoken['duration'])>.2:raise ValueError('Audio duration and speech timestamps do not match.')
         clip={'token':beat['token'],'file':target.name,'voice':beat['voice'],'pacing':settings,'profile':PROFILE,
               'duration':spoken['duration'],'mp3_duration':duration,'words':spoken['words'],'timing_anchors':timed,
-              'removed_silence':spoken['removed_silence'],'sentence_pauses':spoken['sentence_pauses'],'sha256':checksum(temporary),
+              'removed_silence':spoken['removed_silence'],'sentence_pauses':spoken['sentence_pauses'],
+              'pause_warnings':spoken.get('pause_warnings',[]),'sha256':checksum(temporary),
               'batch_id':beat['batch_id'],'source_revision':source_revision,'created_at':time.time()}
         if source(mid,chapter)['revision']!=source_revision:raise FileExistsError('Narration changed. Previous clips are retained; generate the current version.')
         with lock:

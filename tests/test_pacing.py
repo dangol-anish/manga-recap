@@ -9,6 +9,40 @@ from app import alignment, audio, storage, video
 
 
 class PacingTests(unittest.TestCase):
+    def test_continuous_edge_speech_preserves_words_and_does_not_fail(self):
+        # Mock only the remote service; exercise real decoding, pause handling,
+        # encoding and word alignment with no silent frames anywhere.
+        async def capture(text,target,rate,voice):
+            tone=b''.join(struct.pack('<h',round(10000*math.sin(2*math.pi*440*i/24000))) for i in range(19200))
+            with wave.open(str(target),'wb') as track:
+                track.setparams((1,2,24000,0,'NONE','not compressed'));track.writeframes(tone)
+            return [{'text':'One','offset':0,'duration':4_000_000},
+                    {'text':'Two','offset':4_000_000,'duration':4_000_000}]
+        with tempfile.TemporaryDirectory(dir=storage.ROOT) as folder, patch.object(alignment,'capture',side_effect=capture):
+            target=Path(folder)/'speech.mp3'
+            result=alignment.speech('One. Two.',target,{'rate':'+20%','sentence_pause':.18},audio.DEFAULT_VOICE)
+            self.assertTrue(target.is_file())
+            self.assertEqual(result['removed_silence'],[])
+            self.assertEqual(len(result['pause_warnings']),2)
+            self.assertEqual([w['text'] for w in result['words']],['One','Two'])
+            self.assertAlmostEqual(result['duration'],.8,delta=.02)
+            self.assertAlmostEqual(result['words'][1]['start'],.4)
+
+    def test_missing_period_gap_does_not_block_other_measured_pauses(self):
+        with tempfile.TemporaryDirectory(dir=storage.ROOT) as folder:
+            target=Path(folder)/'input.wav'
+            tone=b''.join(struct.pack('<h',round(10000*math.sin(2*math.pi*440*i/24000))) for i in range(19200))
+            with wave.open(str(target),'wb') as track:
+                track.setparams((1,2,24000,0,'NONE','not compressed'))
+                track.writeframes(tone+b'\0\0'*19200+tone[:19200])
+            warnings=[]
+            edits=audio.shorten_pauses(target,[{'start':0,'end':.4},{'start':.4,'end':1.6}],.18,warnings=warnings)
+            self.assertEqual(len(warnings),1)
+            self.assertEqual(warnings[0]['code'],'natural_period_pause')
+            self.assertAlmostEqual(len(video.pcm(target))/48000,1.2+.18,delta=.02)
+            self.assertEqual(len(edits),1)
+            self.assertAlmostEqual(alignment.adjusted_time(1.6,edits),.98,delta=.02)
+
     def test_word_clock_accounts_for_inserted_pause(self):
         edits=[{'start':.5,'end':1.0},{'start':1.5,'end':1.5,'added':.08}]
         self.assertAlmostEqual(alignment.adjusted_time(1.4,edits),.9)

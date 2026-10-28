@@ -5,7 +5,9 @@ import sys
 import tempfile
 import threading
 import shutil
+from io import BytesIO
 from pathlib import Path
+from PIL import Image
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, Response, JSONResponse
 from pydantic import BaseModel, Field
@@ -98,28 +100,38 @@ def prompt_text(mid,chapter,bid,final_recap=False):
     master=(storage.ROOT/'prompts/narration_master.md').read_text(encoding='utf-8')
     return '\n\n'.join([master,'MANGA: '+resolve(mid,chapter)[0]['manga']+' / CHAPTER: '+chapter,
         'CURRENT_BATCH: '+bid,'FINAL_RECAP: '+str(bool(final_recap)).lower(),
-        'CURRENT_PAGES (upload all these labeled images):\n'+json.dumps(batch['pages']),
+        'CURRENT_PAGES (upload all these labeled images):\n'+json.dumps([r['page_id']+'.jpg' for r in batch['page_records']]),
         'VALID_PANEL_IDS (exact IDs, in reading order):\n'+json.dumps(batch['panel_ids']),
         'Previous narration ending, saved cast and bounded story context:\n'+json.dumps(previous,ensure_ascii=False,indent=2),
         'BATCH_RECEIPT (copy exactly into batch_receipt):\n'+json.dumps(receipt(mid,chapter,batch,previous))])+'\n'
 
 
+def jpeg_photo(info,record):
+    source=panels.record_path(info,record['page_id']).parent/record['revision']/'labeled.png'
+    if source.is_symlink() or not source.resolve().is_relative_to(panels.root(info).resolve()):raise ValueError('Unsafe labeled asset.')
+    # Full resolution and no chroma subsampling keep small text and red labels clear.
+    # Explicit RGB encoding strips source metadata and never changes prepared assets.
+    with Image.open(source) as original, original.convert('RGB') as image:
+        image.info.clear()
+        buffer=BytesIO()
+        image.save(buffer,format='JPEG',quality=95,subsampling=0,progressive=False)
+        return buffer.getvalue()
+
+
 def export_photos(mid,chapter,bid,fingerprint):
     batch=find_batch(mid,chapter,bid,fingerprint);info,_,_=resolve(mid,chapter)
-    target=root(mid,chapter)/'exports'/(bid+'-'+fingerprint)
+    target=root(mid,chapter)/'exports'/(bid+'-'+fingerprint+'-jpeg-v1')
     target.parent.mkdir(parents=True,exist_ok=True)
     if target.is_symlink():raise ValueError('Unsafe export folder.')
-    expected=[r['page_id']+'.png' for r in batch['page_records']]
-    if target.is_dir() and sorted(p.name for p in target.iterdir())==sorted(expected) and all(not p.is_symlink() for p in target.iterdir()):
-        if all(panels.source_hash(target/(r['page_id']+'.png'))==panels.source_hash(panels.record_path(info,r['page_id']).parent/r['revision']/'labeled.png') for r in batch['page_records']):return target
-        raise ValueError('Export photos were modified. Remove that export folder and export again; prepared pages are unchanged.')
+    expected=[r['page_id']+'.jpg' for r in batch['page_records']]
     staging=Path(tempfile.mkdtemp(dir=target.parent,prefix='.photos-'))
     try:
         for record in batch['page_records']:
-            source=panels.record_path(info,record['page_id']).parent/record['revision']/'labeled.png'
-            if source.is_symlink() or not source.resolve().is_relative_to(panels.root(info).resolve()):raise ValueError('Unsafe labeled asset.')
-            shutil.copyfile(source,staging/(record['page_id']+'.png'))
+            (staging/(record['page_id']+'.jpg')).write_bytes(jpeg_photo(info,record))
         find_batch(mid,chapter,bid,fingerprint)
+        if target.is_dir() and sorted(p.name for p in target.iterdir())==sorted(expected) and all(not p.is_symlink() for p in target.iterdir()):
+            if all(panels.source_hash(target/name)==panels.source_hash(staging/name) for name in expected):return target
+            raise ValueError('Export photos were modified. Keep those files elsewhere and remove this export folder before exporting again; prepared pages are unchanged.')
         if target.exists():raise ValueError('Export folder was modified. Keep its original photos intact.')
         os.replace(staging,target)
     finally:
@@ -297,7 +309,7 @@ def export_api(mid:str,chapter:str,bid:str,body:ExportRequest):
         with task_lock,lock,panels.lock:
             ensure_idle();path=export_photos(mid,chapter,bid,body.fingerprint)
         open_system_folder(path)
-        return {'folder':path.relative_to(storage.ROOT).as_posix(),'photos':len(list(path.glob('*.png')))}
+        return {'folder':path.relative_to(storage.ROOT).as_posix(),'photos':len(list(path.glob('*.jpg')))}
     except (ValueError,OSError) as exc:raise error(exc)
 
 
@@ -308,9 +320,7 @@ def photo_api(mid:str,chapter:str,bid:str,pid:str,fingerprint:str):
             batch=find_batch(mid,chapter,bid,fingerprint);info,_,_=resolve(mid,chapter)
             record=next((r for r in batch['page_records'] if r['page_id']==pid),None)
             if not record:raise ValueError('Photo is not in this batch.')
-            path=panels.record_path(info,pid).parent/record['revision']/'labeled.png'
-            if path.is_symlink() or not path.resolve().is_relative_to(panels.root(info).resolve()):raise ValueError('Unsafe labeled asset.')
-            return FileResponse(path,media_type='image/png',filename=pid+'.png',headers={'Cache-Control':'no-store'})
+            return Response(jpeg_photo(info,record),media_type='image/jpeg',headers={'Cache-Control':'no-store','Content-Disposition':f'attachment; filename="{pid}.jpg"'})
     except (ValueError,OSError) as exc:raise error(exc)
 
 

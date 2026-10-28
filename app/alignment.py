@@ -197,11 +197,12 @@ def speech(text, target, pacing=None, voice=None):
             tail=text[word['char_end']:next_word['char_start'] if next_word else len(text)]
             if '.' in tail:
                 boundaries.append({'start':word['start'],'end':next_word['start'] if next_word else raw_duration})
-    edits=audio.shorten_pauses(target, boundaries, settings.get('sentence_pause',.18))
+    pause_warnings=[]
+    edits=audio.shorten_pauses(target, boundaries, settings.get('sentence_pause',.18),warnings=pause_warnings)
     duration=len(video.pcm(target))/48000
     return {'raw_duration':raw_duration,'duration':duration,
             'words':aligned_words(text,events,edits,duration),'removed_silence':edits,
-            'sentence_pauses':len(boundaries),'pacing':settings}
+            'sentence_pauses':len(boundaries),'pause_warnings':pause_warnings,'pacing':settings}
 
 
 

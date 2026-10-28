@@ -52,12 +52,18 @@ class StoryTests(unittest.TestCase):
         for i,b in enumerate(state['batches']):
             response=self.export(b);self.assertEqual(response.status_code,200,response.text)
             folder=storage.ROOT/response.json()['folder']
-            expected=[f'p{n:04d}.png' for n in range(i*20,min(i*20+20,21))]
+            expected=[f'p{n:04d}.jpg' for n in range(i*20,min(i*20+20,21))]
             self.assertEqual(sorted(p.name for p in folder.iterdir()),expected)
             self.assertEqual(response.json()['photos'],len(expected))
-            with Image.open(folder/expected[0]) as image:self.assertEqual(image.size,(100,150))
+            with Image.open(folder/expected[0]) as image:
+                self.assertEqual(image.size,(100,150))
+                self.assertEqual(image.format,'JPEG')
+                self.assertEqual(image.mode,'RGB')
+                self.assertFalse(image.info.get('progressive',False))
             photo=self.client.get(self.api+'/'+b['id']+'/photos/'+Path(expected[0]).stem,params={'fingerprint':b['fingerprint']})
             self.assertEqual(photo.status_code,200)
+            self.assertEqual(photo.headers['content-type'],'image/jpeg')
+            self.assertIn(expected[0],photo.headers['content-disposition'])
             self.assertEqual(photo.content,(folder/expected[0]).read_bytes())
             self.assertEqual(self.export(b).status_code,200)
         self.assertFalse(story.state_path(self.mid).exists())
@@ -72,6 +78,44 @@ class StoryTests(unittest.TestCase):
             self.assertNotIn('Content-Disposition',response.headers);self.assertIn('BATCH_RECEIPT',text);self.assertEqual(self.export(b).status_code,200)
         info,files,_=panels.context(self.ident)
         self.assertEqual([panels.safe_record(panels.record_path(info,panels.page_ids(files)[p.name]))['revision'] for p in files],before)
+
+    def test_jpeg_export_preserves_pngs_narration_and_receipt(self):
+        from PIL import ImageChops, ImageStat, JpegImagePlugin
+        records=self.ready();self.assertEqual(self.submit().status_code,200)
+        b=self.status()['batches'][0];info,_,_=panels.context(self.ident)
+        legacy=story.root(self.mid,self.chapter)/'exports'/(b['id']+'-'+b['fingerprint'])
+        legacy.mkdir(parents=True);(legacy/'p0000.png').write_bytes(b'old export untouched')
+        saved=story.state_path(self.mid).read_bytes()
+        prepared=panels.record_path(info,'p0000').parent/records[0]['revision']/'labeled.png'
+        before=prepared.read_bytes()
+        result=self.export(b);self.assertEqual(result.status_code,200,result.text)
+        folder=storage.ROOT/result.json()['folder']
+        self.assertNotEqual(folder,legacy)
+        self.assertEqual((legacy/'p0000.png').read_bytes(),b'old export untouched')
+        self.assertEqual(prepared.read_bytes(),before)
+        self.assertEqual(story.state_path(self.mid).read_bytes(),saved)
+        self.assertTrue(self.status()['batches'][0]['imported'])
+        with Image.open(prepared) as original, Image.open(folder/'p0000.jpg') as jpeg:
+            self.assertEqual(original.size,jpeg.size)
+            self.assertEqual(JpegImagePlugin.get_sampling(jpeg),0)
+            difference=ImageChops.difference(original.convert('RGB'),jpeg)
+            self.assertLess(max(ImageStat.Stat(difference).mean),5)
+        prompt=story.prompt_text(self.mid,self.chapter,b['id'])
+        self.assertIn('"p0000.jpg", "p0001.jpg"',prompt)
+        self.assertEqual(json.loads(prompt.split('BATCH_RECEIPT (copy exactly into batch_receipt):\n')[1]),
+                         story.receipt(self.mid,self.chapter,b,b['previous_context']))
+
+    def test_partial_jpeg_export_failure_leaves_no_published_batch(self):
+        self.ready();b=self.status()['batches'][0];encode=story.jpeg_photo
+        count=0
+        def failing(info,record):
+            nonlocal count
+            count+=1
+            if count==2:raise OSError('disk full')
+            return encode(info,record)
+        with patch.object(story,'jpeg_photo',side_effect=failing):
+            self.assertEqual(self.export(b).status_code,507)
+        self.assertEqual(list((story.root(self.mid,self.chapter)/'exports').iterdir()),[])
 
     def test_later_prompt_locked_until_previous_import(self):
         self.ready(21);self.assertFalse(self.status()['batches'][1]['ready'])
@@ -196,7 +240,7 @@ class StoryTests(unittest.TestCase):
 
     def test_failed_photo_export_is_not_published(self):
         self.ready();b=self.status()['batches'][0]
-        with patch.object(story.shutil,'copyfile',side_effect=OSError('disk full')):
+        with patch.object(story,'jpeg_photo',side_effect=OSError('disk full')):
             response=self.export(b)
             self.assertEqual(response.status_code,507)
             self.assertEqual(response.json()['error']['code'],'disk_full')
@@ -217,7 +261,7 @@ class StoryTests(unittest.TestCase):
 
     def test_modified_export_is_not_silently_reused_or_overwritten(self):
         self.ready();b=self.status()['batches'][0];result=self.export(b)
-        folder=storage.ROOT/result.json()['folder'];photo=folder/'p0000.png';photo.write_bytes(b'changed')
+        folder=storage.ROOT/result.json()['folder'];photo=folder/'p0000.jpg';photo.write_bytes(b'changed')
         self.assertEqual(self.export(b).status_code,400)
         self.assertEqual(photo.read_bytes(),b'changed')
         self.assertEqual(self.client.get(self.api+'/batch-001/photos/p9999',params={'fingerprint':b['fingerprint']}).status_code,400)

@@ -33,7 +33,7 @@ MODEL = 'gemini-3.8-flash-tts'
 VOICE = 'Charon'
 STYLE = 'Read the complete transcript verbatim in one consistent male storyteller voice. Natural conversational delivery, restrained emotion appropriate to the story, brief sentence pauses. Keep the same voice, accent and recording tone. About 160 words per minute. No introduction, summary, added words or omitted passages.'
 VERSION = 1
-DEFAULT_SPEED = 1.2
+DEFAULT_SPEED = 1.1
 LEGACY_BACKUP_PACING = {'rate': '+0%', 'speed': 1., 'sentence_pause': .18}
 active = worker = None
 lock = threading.RLock()

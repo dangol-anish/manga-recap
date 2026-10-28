@@ -60,10 +60,10 @@ class GroupedAudioTests(unittest.TestCase):
     def test_default_speed_prepares_new_audio_and_keeps_original(self):
         a,b,c=self.mocks()
         with a,b,c:job=self.begin()
-        self.assertEqual(job['status'],'complete',job['message']);self.assertEqual(job['speed'],1.2)
+        self.assertEqual(job['status'],'complete',job['message']);self.assertEqual(job['speed'],1.1)
         section=job['sections'][0];raw=g.metadata_file(job,section['original_recording']);paced=g.metadata_file(job,section['recording'])
-        self.assertNotEqual(raw,paced);self.assertAlmostEqual(section['recording']['duration'],4/1.2,delta=.15)
-        self.assertEqual(speech.status(self.mid,self.chapter)['pacing']['speed'],1.2)
+        self.assertNotEqual(raw,paced);self.assertAlmostEqual(section['recording']['duration'],4/1.1,delta=.15)
+        self.assertEqual(speech.status(self.mid,self.chapter)['pacing']['speed'],1.1)
         before=raw.read_bytes();calls=len(self.calls)
         g.prepare_speed(job,section)
         self.assertEqual(raw.read_bytes(),before);self.assertEqual(len(self.calls),calls)
