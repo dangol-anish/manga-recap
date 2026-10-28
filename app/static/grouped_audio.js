@@ -1,5 +1,7 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id),root='/api/grouped-audio';let catalog=[],selection=new Set(),job=null,working=false,polling=false,rows=new Map();
+// Gemini is temporarily hidden; do not poll its jobs, keys or quota in this UI.
+if($('gemini-audio-panel')?.hidden)return;
 function el(tag,text){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;}
 async function api(url,body){const r=await fetch(url,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const v=await r.json();if(!r.ok)throw Error(typeof v.detail==='string'?v.detail:'Audio request failed. Please retry.');return v;}
 function running(){return !!job&&['running','stopping'].includes(job.status);}
