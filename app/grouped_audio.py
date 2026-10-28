@@ -494,10 +494,12 @@ def launch(job):
     return view(job)
 
 
-def start(mid, chapters, confirmed=True):
+def start(mid, chapters, confirmed=True, speed=None):
     from app.tasks import lock as task_lock, ensure_idle
     with task_lock, lock:
-        ensure_idle(); api_key()
+        ensure_idle()
+        speed=audio.speed_pacing(DEFAULT_SPEED if speed is None else speed)['speed']
+        api_key()
         if not shutil.which('ffmpeg'): raise ValueError('Install FFmpeg first.')
         snapshot = source(mid, chapters)
         from app.audio_quality import profile, matching
@@ -505,14 +507,14 @@ def start(mid, chapters, confirmed=True):
         token = story._digest(snapshot)
         for filename in sorted(safe(storage.DATA / 'grouped-audio').glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True):
             previous = load(filename.stem)
-            if previous.get('source_token') == token and previous.get('engine') == 'gemini' and previous.get('model') == MODEL and previous.get('speed', 1.) == DEFAULT_SPEED and previous.get('pronunciations', []) == hints:
+            if previous.get('source_token') == token and previous.get('engine') == 'gemini' and previous.get('model') == MODEL and previous.get('speed', 1.) == speed and previous.get('pronunciations', []) == hints:
                 if previous['status'] in ('failed', 'paused'): return view(previous)
                 if previous['status'] == 'complete' and previous.get('full'):
                     metadata_file(previous, previous['full'])
                     for section in previous['sections']: metadata_file(previous, section['recording'])
                     return view(previous)
         job = {'id': uuid.uuid4().hex, 'created_at': time.time(), 'source': snapshot, 'source_token': token, 'sections': sections(snapshot),
-            'engine': 'gemini', 'model': MODEL, 'voice': VOICE, 'speed': DEFAULT_SPEED, 'pronunciations': hints, 'backup_pacing': dict(audio.DEFAULT_PACING), 'full': None, 'status': 'waiting', 'error': None, 'message': 'Starting selected narration…'}
+            'engine': 'gemini', 'model': MODEL, 'voice': VOICE, 'speed': speed, 'pronunciations': hints, 'backup_pacing': audio.speed_pacing(speed), 'full': None, 'status': 'waiting', 'error': None, 'message': 'Starting selected narration…'}
         return launch(job)
 
 
@@ -579,6 +581,7 @@ class Selection(BaseModel):
     manga_id: str = Field(min_length=1, max_length=128)
     chapters: list[str] = Field(min_length=1, max_length=500)
     free_tier_confirmed: bool = True
+    speed: float | None = Field(default=None,ge=.75,le=1.5,allow_inf_nan=False)
 
 
 class PronunciationProfile(BaseModel):
@@ -631,7 +634,7 @@ def status_api(): return latest()
 
 @router.post('/start')
 @endpoint
-def start_api(body: Selection): return start(body.manga_id, body.chapters, body.free_tier_confirmed)
+def start_api(body: Selection): return start(body.manga_id, body.chapters, body.free_tier_confirmed, body.speed)
 
 
 @router.post('/jobs/{ident}/{action}')

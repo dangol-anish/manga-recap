@@ -58,6 +58,52 @@ class SpeechTests(unittest.TestCase):
         self.assertTrue(current['full']['ready'])
         self.assertTrue(all(b['pause_warnings']==[warning] for b in current['beats']))
 
+    def test_choose_speed_preserves_old_audio_and_reuses_matching_versions(self):
+        self.generate();old_manifest=speech.manifest(self.mid,self.chapter)
+        old_files={c['file']:(speech.root(self.mid,self.chapter)/c['file']).read_bytes() for c in old_manifest['clips'].values()}
+        revision=self.current()['revision']
+        response=self.client.post(self.speech_api+'/generate',json={'revision':revision,'speed':1.3})
+        self.assertEqual(response.status_code,200,response.text)
+        current=self.finish();self.assertEqual(current['ready'],2)
+        self.assertEqual(current['pacing'],{'rate':'+30%','speed':1.3,'sentence_pause':.18})
+        for name,content in old_files.items():self.assertEqual((speech.root(self.mid,self.chapter)/name).read_bytes(),content)
+        calls=len(self.said)
+        response=self.client.post(self.speech_api+'/generate',json={'revision':current['revision'],'speed':1.1})
+        self.assertEqual(response.status_code,200,response.text);self.finish()
+        self.assertEqual(len(self.said),calls,'Previously generated matching clips must be reused')
+        self.assertEqual(self.current()['pacing']['speed'],1.1)
+
+    def test_invalid_speed_does_not_change_audio_or_start_speech(self):
+        before=self.current()['revision']
+        for speed in (.5,2.,1.123):
+            response=self.client.post(self.speech_api+'/generate',json={'revision':before,'speed':speed})
+            self.assertIn(response.status_code,(400,422))
+        self.assertEqual(self.current()['revision'],before);self.assertEqual(self.said,[])
+
+    def test_selected_chapter_queue_snapshots_speed_and_resumes_missing_only(self):
+        from app import batch_work as batch, audio
+        fail=[True]
+        def flaky(text,*args,**kwargs):
+            if fail[0] and text.startswith('Another'):raise ValueError('Temporary test service failure')
+            return self.fake_speech(text,*args,**kwargs)
+        try:
+            with patch.object(speech.alignment,'speech',side_effect=flaky):
+                job=batch.start('audio',self.mid,[self.chapter],speed=1.25)
+                batch.worker.join(15);self.assertFalse(batch.worker.is_alive())
+                saved=batch.view('audio');self.assertEqual(saved['status'],'failed')
+                self.assertEqual(self.current()['ready'],1)
+                fail[0]=False
+                with patch.object(audio,'DEFAULT_PACING',{'rate':'+50%','speed':1.5,'sentence_pause':.18}):
+                    batch.resume('audio',job['id']);batch.worker.join(15)
+                self.assertFalse(batch.worker.is_alive())
+                self.assertEqual(batch.view('audio')['status'],'complete')
+                self.assertEqual(self.current()['pacing']['speed'],1.25)
+                self.assertEqual(len(self.said),2)
+        finally:
+            batch.cancel.set()
+            if batch.worker:batch.worker.join(15)
+            batch.active=None;batch.worker=None;batch.cancel.clear()
+
     def current(self):return speech.status(self.mid,self.chapter)
 
     def finish(self):

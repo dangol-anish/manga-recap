@@ -16,11 +16,12 @@ const flush=()=>new Promise(r=>setImmediate(r));
  }});
  vm.runInContext(fs.readFileSync('app/static/batch_work.js','utf8'),context);await flush();
  const select=panel.querySelectorAll('select')[0];const tools=panel.children.find(c=>c.className==='batch-tools'),actions=panel.children.find(c=>c.className==='batch-actions');assert.equal(tools.hidden,true);assert.equal(actions.hidden,true);select.value='m';select.events.change();assert.equal(tools.hidden,false);assert.equal(actions.hidden,false);
- const boxes=panel.querySelectorAll('input');assert.equal(boxes.length,3);assert.equal(boxes[2].disabled,true);
+ const boxes=panel.querySelectorAll('input').filter(i=>i.type==='checkbox');assert.equal(boxes.length,3);assert.equal(boxes[2].disabled,true);
  assert(!calls.some(c=>c.options?.method),'Opening the page must never start work');
  let buttons=panel.querySelectorAll('button');const all=buttons.find(b=>b.textContent==='Select all ready chapters');const create=buttons.find(b=>b.textContent.startsWith('Create selected'));
  assert.equal(create.disabled,true);all.events.click();assert.equal(boxes[0].checked,true);assert.equal(boxes[1].checked,true);assert.equal(create.disabled,false);
- await create.events.click();assert.deepEqual(JSON.parse(calls.find(c=>c.options?.method).options.body),{manga_id:'m',chapters:['Chapter 1','Chapter 2']});assert.equal(create.disabled,true);
+ const speed=panel.querySelectorAll('input').find(i=>i.type==='range');if(kind==='audio'){speed.value='1.25';speed.events.input();assert(!calls.some(c=>c.options?.method),'Slider must not generate audio');}
+ await create.events.click();assert.deepEqual(JSON.parse(calls.find(c=>c.options?.method).options.body),{manga_id:'m',chapters:['Chapter 1','Chapter 2'],...(kind==='audio'?{speed:1.25}:{})});assert.equal(create.disabled,true);
  assert.equal(panel.querySelectorAll('progress').length,2);
  let stop=panel.querySelectorAll('button').find(b=>b.textContent==='Stop selected chapters');await stop.events.click();assert.equal(create.disabled,false);
  const resume=panel.querySelectorAll('button').find(b=>b.textContent==='Resume unfinished chapters');await resume.events.click();assert.equal(create.disabled,true);

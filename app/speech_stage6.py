@@ -39,15 +39,18 @@ def checksum(path):
     return file_hash(path)
 
 
-def source(mid,chapter):
+def source(mid,chapter,*,speed=None):
     from app.grouped_audio import chapter_state
     overlay=chapter_state(mid,chapter)
-    if overlay:return overlay['source']
+    if overlay:
+        if speed is not None and audio.speed_pacing(speed)['speed']!=overlay['source']['pacing']['speed']:
+            raise ValueError('This chapter uses a grouped recording. Choose its speed in Create continuous audio above.')
+        return overlay['source']
     with story.lock,panels.lock:
         status=story.status(mid,chapter)
         if not status['batches'] or not all(b['imported'] for b in status['batches']):
             raise FileExistsError('Import all current Stage 5 batches before generating audio. Stale batches must be refreshed.')
-        saved=story.load_state(mid)['chapters'][chapter]['batches'];beats=[];settings=pacing(mid,chapter);selected_voice=voice(mid,chapter)
+        saved=story.load_state(mid)['chapters'][chapter]['batches'];beats=[];settings=audio.speed_pacing(speed) if speed is not None else pacing(mid,chapter);selected_voice=voice(mid,chapter)
         for batch in status['batches']:
             entry=saved[batch['id']]
             for item in entry['beats']:
@@ -130,8 +133,8 @@ def recover():
             save_job(job)
 
 
-def status(mid,chapter):
-    current=source(mid,chapter)
+def status(mid,chapter,*,speed=None):
+    current=source(mid,chapter,speed=speed)
     with lock:
         clips=manifest(mid,chapter)['clips']
         for beat in current['beats']:
@@ -270,15 +273,19 @@ def run(job):
             finally:active=None
 
 
-def start(mid,chapter,revision,number=None,resume=None):
+def start(mid,chapter,revision,number=None,resume=None,*,speed=None):
     global active,worker
     from app.tasks import lock as task_lock,ensure_idle
     with task_lock,lock:
         ensure_idle()
         from app.grouped_audio import chapter_state
         if chapter_state(mid,chapter):raise ValueError('This chapter uses a grouped recording. Create or resume the Gemini selection above; individual Edge regeneration would change its voice and timing.')
-        current=status(mid,chapter)
-        if current['revision']!=revision:raise FileExistsError('Narration changed. Refresh before generating audio.')
+        saved_current=status(mid,chapter)
+        # Resume and individual clips always retain the chapter's saved pacing.
+        if speed is not None and (resume or number is not None):
+            if audio.speed_pacing(speed)!=saved_current['pacing']:raise ValueError('Resume and individual beats keep the saved chapter speed. Use Generate missing audio to create the chapter at a new speed.')
+        current=status(mid,chapter,speed=speed) if speed is not None else saved_current
+        if revision not in (saved_current['revision'],current['revision']):raise FileExistsError('Narration changed. Refresh before generating audio.')
         if not shutil.which('ffmpeg'):raise ValueError('Install free FFmpeg and restart the app before generating audio.')
         if resume:
             job=storage.read_json(job_path(resume))
@@ -289,10 +296,14 @@ def start(mid,chapter,revision,number=None,resume=None):
             job['completed_numbers']=[n for n in job['completed_numbers'] if valid_clip(mid,chapter,current['beats'][n-1],clips.get(current['beats'][n-1]['token'],{}))]
         else:
             if number is not None and not 1<=number<=len(current['beats']):raise ValueError('Beat not found.')
-            chosen=[b['number'] for b in current['beats'] if not b['silent'] and (b['number']==number if number is not None else not b['ready'])]
+            chosen=[b['number'] for b in current['beats'] if not b['silent'] and (b['number']==number if number is not None else not b['ready'] or current['revision']!=saved_current['revision'])]
             if not chosen:raise ValueError('No missing spoken beats. Silent beats do not need audio; regenerate a spoken beat individually if needed.')
-            job={'id':uuid.uuid4().hex,'manga_id':mid,'chapter':chapter,'source_revision':revision,'numbers':chosen,'completed_numbers':[],
-                 'regenerate':number is not None,'created_at':time.time(),'elapsed_seconds':0}
+            job={'id':uuid.uuid4().hex,'manga_id':mid,'chapter':chapter,'source_revision':current['revision'],'numbers':chosen,'completed_numbers':[],
+                 'regenerate':number is not None,'pacing':dict(current['pacing']),'created_at':time.time(),'elapsed_seconds':0}
+            if speed is not None and current['pacing']!=saved_current['pacing']:
+                saved=manifest(mid,chapter)
+                saved['pacing']=dict(current['pacing'])
+                storage.write_json(root(mid,chapter)/'manifest.json',saved)
         job.update(status='running',message='Starting saved chapter voice…');save_job(job)
         stop_event.clear();active=job
         worker=threading.Thread(target=run,args=(job,),daemon=True)
@@ -316,6 +327,7 @@ def shutdown():
 
 class Request(BaseModel):
     revision:str=Field(min_length=64,max_length=64)
+    speed:float | None=Field(default=None,ge=.75,le=1.5,allow_inf_nan=False)
 
 
 error = errors.request_error
@@ -358,7 +370,7 @@ def status_api(mid:str,chapter:str):
 
 @router.post('/{mid}/{chapter}/generate')
 def generate_api(mid:str,chapter:str,body:Request):
-    try:return start(mid,chapter,body.revision)
+    try:return start(mid,chapter,body.revision,speed=body.speed)
     except (ValueError,OSError) as exc:raise error(exc)
 
 

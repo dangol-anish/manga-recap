@@ -22,6 +22,14 @@ PAUSE_PROFILE = 'pcm-rms-v1:threshold=-45dB:min-gap=0.20:keep=0.10:window=0.01'
 lock = threading.RLock()
 jobs = {}
 
+
+def speed_pacing(speed):
+    import math
+    if isinstance(speed,bool) or not isinstance(speed,(int,float)) or not math.isfinite(speed) or not .75<=speed<=1.5 or abs(speed*20-round(speed*20))>1e-7:
+        raise ValueError('Choose an audio speed from 0.75× to 1.5× in steps of 0.05.')
+    speed=round(speed,2)
+    return {'rate':f'{round((speed-1)*100):+d}%','speed':speed,'sentence_pause':.18}
+
 def job_key(mid, chapter):
     return mid if chapter=='Chapter 1' else (mid,chapter)
 

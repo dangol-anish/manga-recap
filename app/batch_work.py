@@ -44,9 +44,9 @@ def recover():
         except (ValueError,OSError,KeyError,TypeError) as exc:errors.warning(exc,'speech' if kind=='audio' else 'cinema','Recover selected chapter queue',path(kind))
 
 
-def snapshot(kind, mid, chapter):
+def snapshot(kind, mid, chapter, speed=None):
     module = engine(kind)
-    state = module.status(mid, chapter)
+    state = module.status(mid, chapter, speed=speed) if kind=='audio' and speed is not None else module.status(mid, chapter)
     return state, state['revision' if kind == 'audio' else 'render_token']
 
 
@@ -57,7 +57,7 @@ def view(kind):
     for item in job['items']:
         if item['status'] != 'running': continue
         try:
-            state, _ = snapshot(kind, job['manga_id'], item['chapter'])
+            state, _ = snapshot(kind, job['manga_id'], item['chapter'],job.get('speed'))
             current = state.get('job') or {}
             if kind == 'audio':
                 item['progress'] = state['ready'] / max(1, state['spoken'])
@@ -79,17 +79,20 @@ def run(job):
             with lock:
                 item.update(status='running', message='Starting…', progress=0); save(job)
             try:
-                state, token = snapshot(job['kind'], job['manga_id'], item['chapter'])
+                state, token = snapshot(job['kind'], job['manga_id'], item['chapter'],job.get('speed'))
                 if token != item['token']:
                     raise FileExistsError('This chapter changed. Start a new selection to use the updated version.')
-                if job['kind'] == 'audio' and state['ready'] == state['spoken']:
+                same_speed=True
+                if job['kind']=='audio' and job.get('speed') is not None and not state.get('grouped'):
+                    same_speed=module.pacing(job['manga_id'],item['chapter'])['speed']==job['speed']
+                if job['kind'] == 'audio' and state['ready'] == state['spoken'] and same_speed:
                     if state['full']['available'] and not state['full']['ready']:
                         module.build_full(job['manga_id'], item['chapter'], token)
                 elif job['kind'] == 'video' and state['ready']:
                     pass
                 else:
                     if cancel.is_set(): break
-                    child = module.start(job['manga_id'], item['chapter'], token)
+                    child = module.start(job['manga_id'], item['chapter'], token, speed=job['speed']) if job['kind']=='audio' and job.get('speed') is not None else module.start(job['manga_id'], item['chapter'], token)
                     while module.worker and module.worker.is_alive():
                         if cancel.is_set():
                             if job['kind'] == 'audio': module.stop_event.set()
@@ -135,17 +138,21 @@ def launch(job):
     return copy.deepcopy(job)
 
 
-def start(kind, mid, chapters):
+def start(kind, mid, chapters, speed=None):
     from app.tasks import lock as task_lock, ensure_idle
     with task_lock, lock:
         ensure_idle(); engine(kind)
+        if speed is not None:
+            if kind!='audio':raise ValueError('Speed is selected when creating audio; videos keep the existing audio timing.')
+            from app.audio import speed_pacing
+            speed=speed_pacing(speed)['speed']
         if len(chapters) != len(set(chapters)): raise ValueError('Select each chapter only once.')
         from app.chapter_names import chapter_sort_key
         items = []
         for chapter in sorted(chapters, key=chapter_sort_key):
-            _, token = snapshot(kind, mid, chapter)
+            _, token = snapshot(kind, mid, chapter,speed)
             items.append(dict(chapter=chapter, token=token, status='waiting', progress=0, message='Waiting'))
-        return launch(dict(id=uuid.uuid4().hex, kind=kind, manga_id=mid, created_at=time.time(), items=items))
+        return launch(dict(id=uuid.uuid4().hex, kind=kind, manga_id=mid, created_at=time.time(), items=items,speed=speed))
 
 
 def resume(kind, ident):
@@ -156,7 +163,7 @@ def resume(kind, ident):
             raise ValueError('This selection cannot be resumed.')
         for item in job['items']:
             if item['status'] == 'complete': continue
-            _, token = snapshot(kind, job['manga_id'], item['chapter'])
+            _, token = snapshot(kind, job['manga_id'], item['chapter'],job.get('speed'))
             if token != item['token']: raise FileExistsError(item['chapter'] + ' changed. Start a new selection for the updated chapter.')
             item.update(status='waiting', message='Waiting')
         return launch(job)
@@ -178,6 +185,7 @@ def shutdown():
 class Selection(BaseModel):
     manga_id: str = Field(min_length=1, max_length=128)
     chapters: list[str] = Field(min_length=1, max_length=500)
+    speed:float | None=Field(default=None,ge=.75,le=1.5,allow_inf_nan=False)
 
 
 error = errors.request_error
@@ -191,7 +199,7 @@ def status_api(kind: str):
 
 @router.post('/{kind}')
 def start_api(kind: str, body: Selection):
-    try: return start(kind, body.manga_id, body.chapters)
+    try: return start(kind, body.manga_id, body.chapters,body.speed)
     except (ValueError, OSError) as exc: raise error(exc)
 
 

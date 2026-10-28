@@ -67,6 +67,18 @@ class GroupedAudioTests(unittest.TestCase):
         before=raw.read_bytes();calls=len(self.calls)
         g.prepare_speed(job,section)
         self.assertEqual(raw.read_bytes(),before);self.assertEqual(len(self.calls),calls)
+
+    def test_selected_speed_is_snapshotted_and_changes_reuse_key(self):
+        with patch.object(g,'launch',side_effect=lambda job:(g.save({**job,'status':'paused'}) or job)):
+            first=g.start(self.mid,[self.chapter],speed=1.25)
+            second=g.start(self.mid,[self.chapter],speed=1.3)
+        self.assertNotEqual(first['id'],second['id'])
+        self.assertEqual(first['speed'],1.25)
+        self.assertEqual(first['backup_pacing'],{'rate':'+25%','speed':1.25,'sentence_pause':.18})
+        with patch.object(g,'DEFAULT_SPEED',1.5):
+            self.assertEqual(g.load(first['id'])['speed'],1.25)
+        for speed in (0.,2.,1.123,float('nan')):
+            with self.assertRaises(ValueError):g.start(self.mid,[self.chapter],speed=speed)
     def test_old_job_keeps_normal_speed_after_default_change(self):
         with patch.object(g,'DEFAULT_SPEED',1.),patch.object(g,'launch',side_effect=lambda job:(g.save({**job,'status':'paused'}) or job)):
             job=g.start(self.mid,[self.chapter],True)

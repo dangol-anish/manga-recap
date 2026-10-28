@@ -23,7 +23,7 @@ class Element{
  assert.equal(get('#chapter-select').disabled,true);get('#manga-select').value='sample';await get('#manga-select').events.change();assert.equal(get('#chapter-select').disabled,false,'Choosing a manga must enable its chapter dropdown');get('#chapter-select').value='Chapter 1';await get('#chapter-select').events.change();
 
  assert.equal(calls.filter(c=>c.options?.method).length,0,'Opening Audio must not call TTS');assert.equal(get('#beats').children.length,2);assert.equal(get('#generate').disabled,false);
- await get('#generate').events.click();assert.equal(JSON.parse(calls.find(c=>c.url.endsWith('/generate')).options.body).revision,state.revision);assert.equal(get('#generate').disabled,true);assert.equal(get('#stop-generation').hidden,false);
+ get('#chapter-speed').value='1.2';get('#chapter-speed').events.input();assert.equal(calls.filter(c=>c.options?.method).length,0);await get('#generate').events.click();assert.equal(JSON.parse(calls.find(c=>c.url.endsWith('/generate')).options.body).speed,1.2);assert.equal(JSON.parse(calls.find(c=>c.url.endsWith('/generate')).options.body).revision,state.revision);assert.equal(get('#generate').disabled,true);assert.equal(get('#stop-generation').hidden,false);
  await get('#stop-generation').events.click();assert.equal(get('#resume').hidden,false);await get('#resume').events.click();assert(calls.some(c=>c.url.endsWith('/jobs/job-a/resume')));
  state.job.status='complete';state.busy=false;state.ready=2;state.duration=4;state.full={ready:false,available:true};for(const b of beats){b.ready=true;b.duration=2;b.file=`clip-${b.number}.mp3`;}
  await vm.runInContext('loadStatus()',context);assert.equal(get('#listen').disabled,false);
