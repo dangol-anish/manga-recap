@@ -17,7 +17,7 @@ Open [the local app](http://127.0.0.1:8000/). Keep the terminal running while jo
 | 2. Renumbering | Delete unwanted images yourself, then renumber selected folders from `0000`. |
 | 3. Panel Detection | Select chapters across manga, set reading directions and start detection. |
 | 4. Panel Review | Prepare crops and labeled pages, then continue to Narration. |
-| 5. Narration | Send up to 20 labeled photos and a copied prompt to an external AI; import its JSON reply. |
+| 5. Narration | Use manual photo/prompt/import, or explicitly start the optional [AI Studio browser queue](docs/BROWSER_NARRATION.md). |
 | 6. Audio | Select narrated chapters; Gemini creates balanced sections across chapters and a full track. |
 | 7. Video | Create the MP4, watch it, adjust panel timing if needed, then save a copy. |
 | 8. Stitch | Combine compatible finished chapter videos from one manga. |

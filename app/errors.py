@@ -85,7 +85,7 @@ class SavedDataError(ValueError):
 def context(url, method='GET'):
     parts = str(url).split('?', 1)[0].strip('/').split('/')
     stage = parts[1] if len(parts) > 1 and parts[0] == 'api' else 'library'
-    aliases = {'audio': 'speech', 'video': 'cinema', 'review': 'preparation', 'alignment': 'speech', 'narration': 'story', 'manga': 'library'}
+    aliases = {'audio': 'speech', 'video': 'cinema', 'review': 'preparation', 'alignment': 'speech', 'narration': 'story', 'browser-narration': 'story', 'manga': 'library'}
     stage = aliases.get(stage, stage)
     if stage == 'batch-work': stage = 'speech' if 'audio' in parts else 'cinema'
     last = parts[-1] if parts else ''

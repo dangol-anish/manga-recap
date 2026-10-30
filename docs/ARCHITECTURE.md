@@ -10,7 +10,7 @@ The current app runs at `127.0.0.1:8000`, stores local JSON and uses one heavy j
 | Renumbering `/renumbering` | `renumbering.py` | `renumbering.html/js` |
 | Detection `/detection` | `detection.py`, `detection_worker.py`, `detector.py` | `detection.html/js` |
 | Panel Review `/panels` | `panel_preparation.py` | `panel_preparation.html/js`, panel editor |
-| Narration `/story` | `narration_stage5.py`, shared `narration.py` validation | `story.html/js`, `story_preview.js` |
+| Narration `/story` | `narration_stage5.py`, shared `narration.py` validation, optional `browser_narration.py` queue and `narration_extension.py` paired-tab transport (`browser-extension/` contains the MV3 extension) | `story.html/js`, `story_preview.js`, `browser_narration.js` |
 | Audio `/speech` | `grouped_audio.py`, `speech_stage6.py` | `speech.html`, `grouped_audio.js`, `speech.js` |
 | Video `/cinema` | `video_stage7.py`, shared `video.py` compositor | `cinema.html/js` |
 | Stitch `/stitch` | `stitch.py` | `stitch.html/js` |
@@ -38,7 +38,7 @@ Python filenames in this table are under `app/`; browser files are under `app/st
 
 Download → numbered images → detections → prepared panel revisions → imported narration → saved audio/timestamps → timing/MP4. Each stage binds its output to source versions and rejects stale work. Earlier files and media revisions remain on disk; they are not erased when a newer result becomes current.
 
-Narration is manually generated in an external AI chat. Gemini long-form audio is grouped across chapters, but publishes compatible chapter/beat timing for Video. Shorts snapshots selected narration and source panel references separately; it synthesizes its own selected scripts and never reads long-form MP4s. Stitch reads finished readable chapter videos and copies compatible streams without re-encoding.
+Narration is generated in an external AI chat, manually or through the opt-in browser queue. Gemini long-form audio is grouped across chapters, but publishes compatible chapter/beat timing for Video. Shorts snapshots selected narration and source panel references separately; it synthesizes its own selected scripts and never reads long-form MP4s. Stitch reads finished readable chapter videos and copies compatible streams without re-encoding.
 
 `manga/`, `data/`, `outputs/`, `backups/`, `.env` and models are local-only. [Workflow](WORKFLOW.md) and [Backup & restore](BACKUP_RESTORE.md) describe their user-facing behavior. Cleanup of source code must not migrate or delete any of these directories.
 

@@ -13,7 +13,7 @@ At narrow widths, fields stay within their container and action groups wrap/stac
 
 ## Automated browser checks
 
-The app itself does **not** require Playwright or test browser downloads. For development only:
+The app workflow, including the optional [AI Studio extension queue](BROWSER_NARRATION.md), does **not** require Playwright or test browser downloads. The queue uses an explicitly installed extension in the user’s normal browser. For development checks:
 
 ```sh
 .venv/bin/python -m pip install -r requirements-ui.txt

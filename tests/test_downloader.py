@@ -28,6 +28,17 @@ class SourcesTests(unittest.TestCase):
         html='''<a href="/chapters/b">Chapter 10</a><a href="/chapters/a">Chapter 2.5</a><a href="/chapters/a">duplicate</a><a href="https://evil.com/chapters/c">Chapter 1</a>'''
         self.assertEqual([c['name'] for c in s.chapter_list(html,'https://mangapill.com/manga/1')],['Chapter 2.5','Chapter 10'])
 
+    def test_bare_chapter_numbers_and_decimals_sort_numerically_in_both_parsers(self):
+        names=['1','10','11','15','2','2.5','2.05','3','9']
+        html=''.join(f'<a href="/chapters/c{i}">{name}</a>' for i,name in enumerate(names))
+        expected=['1','2','2.05','2.5','3','9','10','11','15']
+        self.assertEqual([c['name'] for c in s.chapter_list(html,'https://weebcentral.com/series/example')],expected)
+        self.assertEqual([c['name'] for c in s.chapter_list_from_page(s.parse(html),'https://mangapill.com/manga/1')],expected)
+
+    def test_bare_and_prefixed_chapter_numbers_share_numeric_order(self):
+        values=[{'id':str(i),'name':name} for i,name in enumerate(['10','Chapter 3','2.5','Episode 2','Ch. 1','Special 10','Special 2'])]
+        self.assertEqual([v['name'] for v in sorted(values,key=s.chapter_sort)],['Ch. 1','Episode 2','2.5','Chapter 3','10','Special 2','Special 10'])
+
     def test_weebcentral_slug_normalized_and_duplicate_heading(self):
         url, _ = s.source_url('https://weebcentral.com/series/01JNKHGT37KPS3KBVA5CG1X7V0/Title')
         self.assertEqual(url,'https://weebcentral.com/series/01JNKHGT37KPS3KBVA5CG1X7V0')
@@ -72,6 +83,47 @@ class DownloadTests(unittest.TestCase):
         with patch.object(s,'image_urls',AsyncMock(return_value=urls or self.urls)),patch.object(s,'fetch',fetch):
             asyncio.run(d.transfer(self.job))
         return fetch
+
+    def bare_number_job(self):
+        self.catalog['chapters']=[{'id':'c'+name,'name':name,'url':'https://mangapill.com/chapters/c'+name} for name in ('1','10','2','2.5')]
+        storage.write_json(d.record_path('catalogs',self.catalog['id']),self.catalog)
+        self.job=d.create(self.catalog['id'],[c['id'] for c in self.catalog['chapters']])
+        return self.job
+
+    def test_stale_catalog_selection_is_sorted_without_changing_source_names_or_paths(self):
+        job=self.bare_number_job()
+        self.assertEqual([c['name'] for c in job['chapters']],['1','2','2.5','10'])
+        self.assertEqual([c['name'] for c in d.load('catalogs',self.catalog['id'])['chapters']],['1','10','2','2.5'])
+        self.assertTrue(all(c['folder'].endswith('/'+c['name']) for c in job['chapters']))
+
+    def test_legacy_progress_view_does_not_mutate_saved_queue(self):
+        job=self.bare_number_job();job['chapters'].sort(key=lambda c:c['name'])
+        self.assertEqual([c['name'] for c in d.summary(job)['chapters']],['1','2','2.5','10'])
+        self.assertEqual([c['name'] for c in job['chapters']],['1','10','2','2.5'])
+
+    def test_resume_legacy_queue_uses_numeric_order_with_mocked_worker(self):
+        job=self.bare_number_job();job['chapters'].sort(key=lambda c:c['name']);d.save(job)
+        with patch('app.tasks.ensure_idle'),patch.object(d.threading,'Thread'):
+            d.start(d.load('jobs',job['id']))
+        saved=d.load('jobs',job['id'])
+        self.assertEqual([c['name'] for c in saved['chapters']],['1','2','2.5','10'])
+        for c in saved['chapters']:
+            self.assertEqual(storage.read_json(d.destination(c['folder'])/'.download-owner.json')['state_job_id'],job['id'])
+
+    def test_legacy_transfer_runs_numeric_order_and_reuses_complete_chapter(self):
+        job=self.bare_number_job();job['chapters'].sort(key=lambda c:c['name'])
+        completed=next(c for c in job['chapters'] if c['name']=='10')
+        folder=d.destination(completed['folder']);folder.mkdir(parents=True)
+        content=png('red');path=folder/'001.png';path.write_bytes(content)
+        completed['pages']=[{'url':self.urls[0],'file':'001.png','status':'complete','bytes':len(content),'sha256':sha256(content).hexdigest()}]
+        completed.update(status='complete',discovered=True)
+        names=[]
+        async def page_list(client,chapter,host):names.append(chapter['name']);return [self.urls[0]]
+        with patch.object(s,'image_urls',AsyncMock(side_effect=page_list)),patch.object(s,'fetch',AsyncMock(return_value=png())) as fetch:
+            asyncio.run(d.transfer(job))
+        self.assertEqual(names,['1','2','2.5']);self.assertEqual(fetch.await_count,3)
+        self.assertEqual(path.read_bytes(),content)
+        self.assertEqual([c['name'] for c in job['chapters']],['1','2','2.5','10'])
 
     def test_download_images_correct_numbering_hashes_and_progress(self):
         self.transfer()

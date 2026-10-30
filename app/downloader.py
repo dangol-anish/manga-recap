@@ -90,6 +90,7 @@ def verified(path, entry):
 
 def summary(job):
     value = deepcopy(job)
+    value['chapters'].sort(key=sources.chapter_sort)
     chapters = value['chapters']
     value['total_pages'] = sum(len(c.get('pages', [])) for c in chapters)
     value['verified_pages'] = sum(sum(p.get('status') == 'complete' for p in c.get('pages', [])) for c in chapters)
@@ -128,7 +129,7 @@ async def discover(url):
 def create(catalog_id, chapter_ids):
     catalog = load('catalogs', catalog_id)
     chosen = set(chapter_ids)
-    chapters = [c for c in catalog['chapters'] if c['id'] in chosen]
+    chapters = sorted((c for c in catalog['chapters'] if c['id'] in chosen), key=sources.chapter_sort)
     if not chapters or len(chapters) != len(chosen): raise ValueError('Choose valid chapters from the loaded manga.')
     folder = f'manga/{slug(catalog["title"])}-{catalog["host"].split(".")[0]}-{catalog_id[:8]}'
     destination(folder)
@@ -190,6 +191,9 @@ async def transfer(job):
 
 
 async def transfer_requests(job):
+    # Repair legacy queue order by moving chapter records together with their
+    # existing paths, page hashes and progress. Never reorder pages in a chapter.
+    job['chapters'].sort(key=sources.chapter_sort)
     async with httpx.AsyncClient(timeout=httpx.Timeout(20, connect=10), follow_redirects=False) as client:
         # Hash-check local work first. Complete chapters need no source request,
         # even if a previous page-list refresh failed or the app was interrupted.
@@ -307,6 +311,7 @@ def start(job):
     from app.tasks import lock as task_lock, ensure_idle
     with task_lock, lock:
         ensure_idle()
+        job['chapters'].sort(key=sources.chapter_sort)
         for chapter in job['chapters']:
             if (destination(chapter['folder']) / '.renumbering.json').exists():
                 raise ValueError('This chapter has been cleaned or renumbered. Download resume is disabled to protect your edits.')

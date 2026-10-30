@@ -1,0 +1,162 @@
+{
+  "type": "object",
+  "properties": {
+    "batch_receipt": {
+      "type": "object",
+      "properties": {
+        "manga_id": {
+          "type": "string"
+        },
+        "chapter": {
+          "type": "string"
+        },
+        "batch_id": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "context_token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "manga_id",
+        "chapter",
+        "batch_id",
+        "fingerprint",
+        "context_token"
+      ]
+    },
+    "cast": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "gender": {
+            "type": "string"
+          },
+          "age_group": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "look": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "gender",
+          "age_group",
+          "role",
+          "look"
+        ]
+      }
+    },
+    "beats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "panel_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "narration": {
+            "type": "string"
+          },
+          "unsure": {
+            "type": "string"
+          },
+          "anchors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "panel_id": {
+                  "type": "string"
+                },
+                "phrase": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "panel_id",
+                "phrase"
+              ]
+            }
+          },
+          "replace_beat": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "panel_ids",
+          "narration",
+          "unsure",
+          "anchors"
+        ]
+      }
+    },
+    "continuity": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "open_threads": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "open_threads"
+      ]
+    },
+    "chapter_summary": {
+      "type": "string"
+    },
+    "memory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "uncertain"
+            ]
+          },
+          "panel_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "text",
+          "status",
+          "panel_ids"
+        ]
+      }
+    },
+    "error": {
+      "type": "string"
+    }
+  }
+}

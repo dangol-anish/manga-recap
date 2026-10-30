@@ -4,6 +4,9 @@ lock=threading.RLock()
 
 
 def ensure_idle():
+    from app import browser_narration
+    if browser_narration.active is not None and threading.current_thread() is not browser_narration.worker:
+        raise FileExistsError('Browser narration is running. Pause or stop it before starting another task.')
     from app import maintenance
     if maintenance.recovery_required:
         raise FileExistsError('An interrupted restore needs recovery. Open Backup & storage and check restore recovery before processing more chapters.')

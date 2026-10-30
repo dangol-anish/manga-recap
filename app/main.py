@@ -95,7 +95,7 @@ async def lifespan(app):
                 job.update(status='paused', message='Interrupted by shutdown. Resume this chapter to continue.')
                 write_json(path, job)
         from importlib import import_module
-        modules = [import_module('app.' + name) for name in ('maintenance','downloader','detection','panel_preparation','speech_stage6','video_stage7','batch_work','stitch','shorts','grouped_audio')]
+        modules = [import_module('app.' + name) for name in ('maintenance','downloader','detection','panel_preparation','speech_stage6','video_stage7','batch_work','stitch','shorts','grouped_audio','browser_narration')]
         try:
             for module in modules:
                 try: module.recover()
@@ -127,7 +127,16 @@ async def local_requests(request: Request, call_next):
         return JSONResponse({'detail': 'Local access only.'}, status_code=403)
     origin = request.headers.get('origin')
     if origin and origin not in {f'http://{request.headers.get("host")}', f'https://{request.headers.get("host")}'}:
-        return JSONResponse({'detail': 'Use this app from its local page.'}, status_code=403)
+        # Only the explicit pairing/transport endpoints accept an extension
+        # origin. They still verify its identity, one-time code/session token.
+        bridge_paths = {'/api/narration-extension/' + name for name in ('pair', 'poll', 'result', 'permit','heartbeat','progress')}
+        bridge_request = request.method == 'POST' and request.url.path in bridge_paths
+        if bridge_request:
+            from app.narration_extension import extension_id
+            try: extension_id(request)
+            except HTTPException: bridge_request = False
+        if not bridge_request:
+            return JSONResponse({'detail': 'Use this app from its local page.'}, status_code=403)
     try:
         from app import maintenance
         if request.method not in {'GET', 'HEAD', 'OPTIONS'} and not request.url.path.startswith('/api/storage/'):
@@ -673,6 +682,10 @@ def story_stage5_page():
     return FileResponse(ROOT / 'app/static/story.html')
 
 from app.narration_stage5 import router as story_router
+from app.browser_narration import router as browser_narration_router
+app.include_router(browser_narration_router)
+from app.narration_extension import router as narration_extension_router
+app.include_router(narration_extension_router)
 app.include_router(story_router)
 
 

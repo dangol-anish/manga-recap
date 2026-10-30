@@ -8,6 +8,7 @@ from decimal import Decimal
 
 import httpx
 from app import download_requests as requests
+from app.chapter_names import chapter_sort_key
 
 SOURCES = {'mangapill.com': 'MangaPill', 'weebcentral.com': 'WeebCentral'}
 HEADERS = {'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html,image/*;q=0.9,*/*;q=0.8'}
@@ -80,8 +81,12 @@ def parse(html):
 
 def chapter_sort(item):
     number = re.search(r'(?:chapter|episode|ch\.?)\s*#?\s*(\d+(?:\.\d+)?)', item['name'], re.I)
+    if not number:
+        # Some WeebCentral series label chapters only "1", "2", "10".
+        # Those are chapter numbers too, not alphabetical title strings.
+        number = re.fullmatch(r'#?\s*(\d+(?:\.\d+)?)', item['name'].strip())
     if number: return (0, Decimal(number[1]), item['id'])
-    return (1, item['name'].casefold(), item['id'])
+    return (1, chapter_sort_key(item['name']), item['id'])
 
 
 def chapter_list(html, base):
