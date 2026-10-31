@@ -8,7 +8,7 @@ from app.detector import cpu_threads
 class CpuBudgetTests(unittest.TestCase):
     def test_windows_budget_and_small_machines(self):
         with patch.dict(os.environ, {}, clear=True), patch('app.detector.sys.platform', 'win32'):
-            for available, expected in ((16, 8), (8, 4), (2, 2), (1, 1), (None, 2)):
+            for available, expected in ((32, 12), (16, 12), (8, 6), (2, 2), (1, 1), (None, 2)):
                 with self.subTest(available=available), patch('app.detector.os.cpu_count', return_value=available):
                     self.assertEqual(cpu_threads(), expected)
 

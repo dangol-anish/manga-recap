@@ -1,8 +1,8 @@
 # Stage 3 CPU use
 
-Windows detection now defaults to half the logical CPU count, capped at eight
+Windows detection now defaults to three quarters of the logical CPU count, capped at 12
 threads (and bounded by the available count). On a Ryzen 7 5825U with 16 logical
-processors this gives eight calculation threads instead of two. macOS retains
+processors this gives 12 calculation threads instead of two. macOS retains
 the previous two-thread setting.
 
 This changes only PyTorch's CPU thread budget. The model revision, full CPU

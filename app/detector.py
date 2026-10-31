@@ -17,7 +17,7 @@ PROMPT = 'Find all panels, texts, characters, and speech-bubble tails in the ima
 def cpu_threads():
     """Use a bounded Windows CPU budget; retain the existing Mac setting."""
     available = os.cpu_count() or 2
-    default = min(8, max(2, available // 2)) if sys.platform == 'win32' else 2
+    default = min(12, max(2, available * 3 // 4)) if sys.platform == 'win32' else 2
     value = os.environ.get('MAGI_CPU_THREADS', str(default))
     try:
         requested = int(value)
