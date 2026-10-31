@@ -41,6 +41,23 @@ Tests use isolated chapters, mocked services, a synthetic AI Studio page and an 
 
 ## Waiting for AI Studio
 
+While an explicit queue is running, the extension moves only its paired AI
+Studio tab into a separate maximized browser window and reuses that window. The
+tab stays active there while you view Stage 5 in your original window. Keep the
+AI Studio window open and unminimized. If a reply read reports the page hidden,
+the extension brings only that window forward and reads again after a short
+rendering delay. This never reloads the conversation or repeats a submission.
+An unfinished reply in an unfocused window also gets a rendering wake, at most
+once per 15 seconds, for AI Studio versions that defer updates until focus.
+Hidden replies cannot be accepted as complete. Stopping or finishing a queue
+ends these window checks; the window is left open. No browser-wide performance
+settings or additional extension permissions are changed. Reload extension
+version 0.6.1 after updating; reconnect it if requested by Stage 5. Model checks
+recognize the selected model card and exact model ID in Run settings as well
+as the older model button. Mentions in prompts or model-picker menus do not
+prove that the expected model is selected. Thinking level labels are checked
+without depending on capitalization.
+
 The extension allows up to 10 minutes total for preparing controls, schema and
 photo uploads, and a separate 10 minutes for a generated reply. A slow control
 can use the remaining preparation window instead of failing after 12 seconds.

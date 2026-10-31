@@ -224,7 +224,7 @@ class ExtensionBrowser:
         from app.browser_narration import cancel
         self.cancel = cancel
         hello = command('hello', cancel=self.cancel)
-        if hello.get('protocol') != 4:
+        if hello.get('protocol') != 4 or hello.get('window_visibility') is not True:
             raise Attention('Update the installed Manga Recap Narration extension using Reload in your browser extensions page, then Resume. The old reply reader will not be used.', 'extension_update')
         return self
 
@@ -278,7 +278,7 @@ class ExtensionBrowser:
             checkpoint(value.get('url', ''))
             tokens = reply_tokens(value)
             fresh = [(token,item) for token,item in zip(tokens,value['replies']) if token not in before]
-            if value.get('finished') and not value.get('generating') and fresh and fresh[-1][0] == tokens[-1]:
+            if value.get('visible') is not False and value.get('finished') and not value.get('generating') and fresh and fresh[-1][0] == tokens[-1]:
                 token,item = fresh[-1]
                 text = decode_reply(item['text'])
                 complete = False

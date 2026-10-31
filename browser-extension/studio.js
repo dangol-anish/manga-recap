@@ -83,7 +83,7 @@
     const generating=!!elements(buttons,/^(?:Stop|Cancel)(?:\s|$)/i).length||
       !!elements('[aria-busy="true"],[role="progressbar"],mat-progress-spinner',/.*/).length;
     // Completion belongs to the latest model turn, never a stale page-wide notice.
-    return {protocol:4,url:location.href,status_text:platformText(),replies,generating,
+    return {protocol:4,url:location.href,visible:document.visibilityState==='visible',focused:document.hasFocus(),status_text:platformText(),replies,generating,
       finished:!generating&&replies.at(-1)?.completed===true};
   }
   async function readSnapshot(){
@@ -97,16 +97,35 @@
     }
     return snapshot();
   }
+  function modelSurface(){
+    // The current model is a non-button card in newer Run settings layouts.
+    for(const heading of elements('h1,h2,h3,h4,[role="heading"],span,div,p',/^Run settings$/i)){
+      for(let root=heading.parentElement;root&&root!==document.body;root=root.parentElement){
+        if(root.querySelector('[aria-label="Enter a prompt"]'))break;
+        const switches=[...root.querySelectorAll('[role="switch"]')];
+        if(switches.some(e=>visible(e)&&/^Structured outputs$/i.test(label(e))))return root;
+      }
+    }
+    // Retain the earlier model-button layout, without matching prompt text.
+    return elements(buttons,/^Gemini\s+3\.8\s+Flash(?:\s|$)/i)[0]||null;
+  }
+  function expectedModel(surface){
+    const nodes=[surface,...surface.querySelectorAll('h1,h2,h3,h4,span,div,p,button,[role="button"]')];
+    return nodes.some(e=>visible(e)&&!e.closest('[role="listbox"],[role="menu"],[role="dialog"]')&&
+      /^(?:Gemini\s+3\.8\s+Flash|gemini-3\.8-flash)$/i.test(label(e).replace(/\s+/g,' ').trim()))||
+      (surface.matches(buttons)&&/^Gemini\s+3\.8\s+Flash(?:\s|$)/i.test(label(surface)));
+  }
   async function configure(outputSchema,report){
     await report('configuring');
     check();
-    if(!elements(buttons,/Gemini 3\.8 Flash/).length)fail('Select Gemini 3.8 Flash in Run settings, then Resume. The app will not silently change models.');
-    const thinking=one('[role="combobox"]','Thinking Level');
+    const model=await until(()=>modelSurface());
+    if(!expectedModel(model))fail('Run settings shows a different model. Select Gemini 3.8 Flash, then Resume. Nothing was submitted.');
+    const thinking=one('[role="combobox"]',/^Thinking level$/i);
     if(!/medium/i.test(thinking.innerText)){
       thinking.click();(await until(()=>elements('[role="option"]','Medium')[0])).click();
       await until(()=>/medium/i.test(thinking.innerText));
     }
-    for(const name of ['Code execution','Function calling','Grounding with Google Search','Grounding with Google Maps','Browse the url context']){
+    for(const name of ['Code execution','Function calling','Grounding with Google Search','Grounding with Google Maps','Browse the url context','URL context']){
       const e=elements('[role="switch"]',name)[0];if(e?.getAttribute('aria-checked')==='true')e.click();
     }
     const structured=one('[role="switch"]','Structured outputs');

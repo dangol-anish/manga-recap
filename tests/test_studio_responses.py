@@ -100,5 +100,11 @@ class ResponseTests(unittest.TestCase):
             browser.recover_page(current['url'])
         command.assert_not_called()
 
+    def test_hidden_completed_reply_waits_until_window_renders(self):
+        browser=extension.ExtensionBrowser();done=snapshot('{"beats":[1]}')
+        hidden={**done,'visible':False}
+        with patch.object(browser,'snapshot',side_effect=[hidden]*5+[done]*3),patch.object(extension.time,'monotonic',side_effect=range(0,600,20)):
+            self.assertEqual(browser.receive([],Cancel(),lambda url:None),'{"beats":[1]}')
+
 
 if __name__=='__main__':unittest.main()

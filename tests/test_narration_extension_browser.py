@@ -51,11 +51,11 @@ class ExtensionBrowserTests(unittest.TestCase):
                 context=runtime.chromium.launch_persistent_context(str(Path(temporary)/'profile'),channel='chromium',headless=True,
                     args=[f'--disable-extensions-except={extension}',f'--load-extension={extension}'])
                 try:
-                    html='''<!doctype html><main>
-<button>Gemini 3.8 Flash</button><div role="combobox" aria-label="Thinking Level">Medium</div>
+                    html='''<!doctype html><main><aside><h2>Run settings</h2>
+<div><span id="selected-model">Gemini 3.8 Flash</span><p id="selected-model-id">gemini-3.8-flash</p></div><div role="combobox" aria-label="Thinking level">Medium</div>
 <button role="switch" aria-label="Structured outputs" aria-checked="false" id="structured">Structured outputs</button>
 <button aria-label="Edit JSON schema" id="edit">Edit schema</button><div id="editor" hidden><button role="tab">Code Editor</button><textarea aria-label="Enter a JSON schema"></textarea><button aria-label="Save the current schema" id="save">Save</button></div>
-<textarea aria-label="Enter a prompt"></textarea><input type="file" multiple><button id="run">Run</button><section id="responses"></section>
+</aside><textarea aria-label="Enter a prompt"></textarea><input type="file" multiple><button id="run">Run</button><section id="responses"></section>
 </main><script>
 window.sends=0;
 document.querySelector('#structured').onclick=()=>{document.querySelector('#structured').setAttribute('aria-checked','true');document.querySelector('#editor').hidden=false;};
