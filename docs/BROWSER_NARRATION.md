@@ -44,7 +44,14 @@ Tests use isolated chapters, mocked services, a synthetic AI Studio page and an 
 The extension allows up to 10 minutes total for preparing controls, schema and
 photo uploads, and a separate 10 minutes for a generated reply. A slow control
 can use the remaining preparation window instead of failing after 12 seconds.
-Provider errors and uncertain reply states still pause safely. Stop remains
+Empty text, incomplete JSON and uncertain reply states keep waiting for the full
+response deadline. Completion must belong to the latest model turn, with no
+visible generation or busy indicator, and the complete JSON must remain stable
+across three reads. No empty or incomplete draft is sent to validation or an
+automatic correction. A ten-minute expiry pauses without claiming an empty
+answer. Resuming the same open conversation does not reload it. The updated
+reader uses protocol 4; older installed extensions must be reloaded.
+Provider errors still pause safely. Stop remains
 available; a timeout never automatically repeats a submission or changes saved
 narration. After updating, restart the app, reload the extension on your browser's
 extensions page, refresh its AI Studio tab, then inspect the tab before Resume.

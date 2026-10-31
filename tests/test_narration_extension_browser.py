@@ -123,6 +123,18 @@ document.querySelector('#run').onclick=()=>{window.sends++;document.querySelecto
                         snapshot=command('snapshot');self.assertTrue(snapshot['finished']);self.assertEqual(snapshot['replies'][-1]['text'],reply)
                     page.locator('#run').evaluate("e=>{e.textContent='Stop';e.disabled=false;}")
                     snapshot=command('snapshot');self.assertTrue(snapshot['generating']);self.assertFalse(snapshot['finished'])
+                    # Lowercase stop labels and busy rendering must also block completion.
+                    page.locator('#run').evaluate("e=>e.textContent='stop generating'")
+                    snapshot=command('snapshot');self.assertTrue(snapshot['generating']);self.assertFalse(snapshot['finished'])
+                    page.locator('#run').evaluate("e=>e.textContent='Run'")
+                    page.locator('#responses').evaluate("e=>e.setAttribute('aria-busy','true')")
+                    snapshot=command('snapshot');self.assertTrue(snapshot['generating']);self.assertFalse(snapshot['finished'])
+                    page.locator('#responses').evaluate("e=>e.removeAttribute('aria-busy')")
+                    # An old completed turn and stale page notice cannot finish a new turn.
+                    page.locator('#responses').evaluate('''e=>e.insertAdjacentHTML('beforeend','<p>Response ready.</p><article data-message-author-role="assistant"><pre>{</pre></article>')''')
+                    snapshot=command('snapshot');self.assertFalse(snapshot['finished']);self.assertEqual(snapshot['replies'][-1]['text'],'{')
+                    page.locator('#responses').evaluate('''e=>e.lastElementChild.innerHTML='<pre>{"beats":[]}</pre><button>Good response</button>' ''')
+                    snapshot=command('snapshot');self.assertTrue(snapshot['finished']);self.assertEqual(snapshot['replies'][-1]['text'],'{"beats":[]}')
                     page.locator('#run').evaluate("e=>{e.textContent='Run';e.disabled=true;}")
 
                     self.assertIn('error',command('send',expired=True));self.assertEqual(page.evaluate('window.sends'),1)

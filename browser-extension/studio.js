@@ -1,8 +1,8 @@
 /* Visible DOM controls only. No page internals, network interception, login or keys. */
 (() => {
   'use strict';
-  if(globalThis.__mangaNarrationExtension===3)return;
-  globalThis.__mangaNarrationExtension=3;
+  if(globalThis.__mangaNarrationExtension===4)return;
+  globalThis.__mangaNarrationExtension=4;
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const visible=e=>!!(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden';
   const label=e=>{
@@ -78,11 +78,13 @@
     });
   }
   function snapshot(){
-    check();const runs=run();
-    const replies=modelReplies(),generating=!!elements(buttons,/^Stop(?:\s|$)/).length;
-    const terminal=/Response ready\./i.test(document.body.innerText);
-    return {protocol:3,url:location.href,status_text:platformText(),replies,generating,
-      finished:!generating&&(replies.at(-1)?.completed===true||(runs.length===1&&terminal))};
+    check();
+    const replies=modelReplies();
+    const generating=!!elements(buttons,/^(?:Stop|Cancel)(?:\s|$)/i).length||
+      !!elements('[aria-busy="true"],[role="progressbar"],mat-progress-spinner',/.*/).length;
+    // Completion belongs to the latest model turn, never a stale page-wide notice.
+    return {protocol:4,url:location.href,status_text:platformText(),replies,generating,
+      finished:!generating&&replies.at(-1)?.completed===true};
   }
   async function readSnapshot(){
     // Only expand code in the latest model turn with feedback controls.
@@ -169,7 +171,7 @@
   let busy=false;
   chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     if(sender.id!==chrome.runtime.id||message.type!=='narration-command')return;
-    if(message.action==='ping'){reply({ready:true,documentId,protocol:3});return;}
+    if(message.action==='ping'){reply({ready:true,documentId,protocol:4});return;}
     if(busy){reply({error:'An earlier action is still running in this AI Studio tab. Inspect it before resuming.',code:'recovery'});return;}
     busy=true;
     actionDeadline=message.expiresAt;
