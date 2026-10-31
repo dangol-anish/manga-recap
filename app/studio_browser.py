@@ -150,7 +150,7 @@ class StudioBrowser:
         run.click()
         return self.page.url
 
-    def receive(self, before, cancel, checkpoint, timeout=1200):
+    def receive(self, before, cancel, checkpoint, timeout=600):
         deadline = time.monotonic() + timeout
         previous = None
         stable = 0
@@ -171,7 +171,7 @@ class StudioBrowser:
             if stable >= 3: return candidate
             previous = candidate
             self.page.wait_for_timeout(1000)
-        raise Attention('AI Studio did not provide a complete new JSON response within 20 minutes. Check the last request before retrying; it will not be resent automatically.', 'timeout')
+        raise Attention('AI Studio did not provide a complete new JSON response within 10 minutes. Check the last request before retrying; it will not be resent automatically.', 'timeout')
 
     def visible_replies(self):
         return json_objects(self.page.locator('main').inner_text())

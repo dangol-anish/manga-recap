@@ -9,6 +9,26 @@ from app.studio_browser import Attention
 
 
 class ExtensionTests(unittest.TestCase):
+    def test_preparation_allows_ten_minutes_without_sending(self):
+        from unittest.mock import patch
+        cancel=threading.Event()
+        with patch.object(bridge,'command',return_value={'url':'https://aistudio.google.com/prompts/test'}) as command:
+            bridge.ExtensionBrowser().prepare('fixture',[],cancel)
+        self.assertEqual(command.call_count,1)
+        self.assertEqual(command.call_args.args[0],'prepare')
+        self.assertEqual(command.call_args.args[2:],(cancel,600))
+
+    def test_generation_default_is_ten_minutes_and_does_not_resend(self):
+        from unittest.mock import patch
+        browser=bridge.ExtensionBrowser()
+        value={'url':'https://aistudio.google.com/prompts/test','replies':[], 'finished':False,'generating':True}
+        with patch.object(browser,'snapshot',return_value=value),patch.object(bridge.time,'monotonic',side_effect=[0,1,601]),patch.object(bridge,'command') as command:
+            with self.assertRaises(Attention) as error:
+                browser.receive([],threading.Event(),lambda url:None)
+        self.assertEqual(error.exception.code,'timeout')
+        self.assertIn('10 minutes',str(error.exception))
+        command.assert_not_called()
+
     def setUp(self):
         bridge.connection=bridge.pending=bridge.pair_code=None
         app=FastAPI();app.include_router(bridge.router)

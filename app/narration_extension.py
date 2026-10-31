@@ -259,7 +259,7 @@ class ExtensionBrowser:
             beat_schema['properties'].pop('replace_beat', None)
         else:
             beat_schema['required'].append('replace_beat')
-        return command('prepare', {'prompt': prompt, 'photos': files, 'fresh': fresh, 'schema': schema}, cancel, 240).get('url')
+        return command('prepare', {'prompt': prompt, 'photos': files, 'fresh': fresh, 'schema': schema}, cancel, 600).get('url')
 
     def visible_replies(self):
         return reply_tokens(self.snapshot())
@@ -267,7 +267,7 @@ class ExtensionBrowser:
     def send(self):
         return command('send', cancel=getattr(self, 'cancel', None)).get('url', '')
 
-    def receive(self, before, cancel, checkpoint, timeout=1200):
+    def receive(self, before, cancel, checkpoint, timeout=600):
         deadline = time.monotonic() + timeout
         previous, stable = None, 0
         idle_since = None
@@ -302,7 +302,7 @@ class ExtensionBrowser:
                     if time.monotonic()-unknown_since>=120:
                         raise Attention('AI Studio has shown neither a generation indicator nor a verifiable completed response for two minutes. The queue is paused because its page state is uncertain. Inspect the selected tab before resuming; nothing was resent or imported.', 'response_read')
             cancel.wait(1)
-        raise Attention('AI Studio did not finish a new JSON reply within 20 minutes. Inspect its last request; nothing will be resent automatically.', 'timeout')
+        raise Attention('AI Studio did not finish a new JSON reply within 10 minutes. Inspect its last request; nothing will be resent automatically.', 'timeout')
 
     def recover_page(self, url):
         parsed = urlparse(url)

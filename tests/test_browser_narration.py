@@ -61,14 +61,16 @@ class BrowserNarrationTests(unittest.TestCase):
         story_tests.StoryTests.tearDown(self)
 
     def wait(self,paused=False):
-        deadline=time.monotonic()+10
+        # Multi-batch fixtures validate every source repeatedly on Windows.
+        # This is a test-worker deadline, independent of AI response timeouts.
+        deadline=time.monotonic()+60
         while time.monotonic()<deadline:
             job=queue.current()
             if job and job['status'] in {'paused','failed','complete'}:
                 if not paused and queue.worker:queue.worker.join(2)
                 return job
             time.sleep(.01)
-        self.fail('Fixture narration worker did not stop.')
+        self.fail(f'Fixture narration worker did not finish within 60 seconds: {queue.current()}')
 
     def test_browser_queue_imports_checkpoints_and_reuses_current_work(self):
         queue.start(self.mid,[self.chapter]);job=self.wait()

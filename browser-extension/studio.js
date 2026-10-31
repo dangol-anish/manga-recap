@@ -13,7 +13,8 @@
   const elements=(selector,name)=>[...document.querySelectorAll(selector)].filter(e=>visible(e)&&(typeof name==='string'?label(e)===name:name.test(label(e))));
   function fail(message,code='settings',retry_safe=true){const error=Error(message);Object.assign(error,{code,retry_safe});throw error;}
   function one(selector,name){const found=elements(selector,name);if(found.length!==1)fail(`Could not identify ${name} in AI Studio. Check Run settings and the selected tab, then Resume.`);return found[0];}
-  async function until(fn,timeout=12000){const end=Date.now()+timeout;while(Date.now()<end){const result=fn();if(result)return result;await wait(200);}fail('An AI Studio control did not become ready. Check the tab before resuming.');}
+  let actionDeadline=Infinity;
+  async function until(fn,timeout=600000){const end=Math.min(Date.now()+timeout,actionDeadline);while(Date.now()<end){check();const result=fn();if(result)return result;await wait(200);}fail('AI Studio controls did not become ready within the 10-minute preparation window. Nothing was submitted. Check the tab before resuming.');}
   function check(){
     // Read provider notices, never quoted story dialogue or the user's prompt.
     const text=platformText();
@@ -138,7 +139,7 @@
   }
   async function prepare(payload,expiresAt,report){
     check();
-    const prompt=await until(()=>elements('textarea,input,[contenteditable="true"]','Enter a prompt')[0],30000);
+    const prompt=await until(()=>elements('textarea,input,[contenteditable="true"]','Enter a prompt')[0]);
     await configure(payload.schema,report);
     if(Date.now()>expiresAt)fail('Preparing this batch expired. Nothing was submitted.');
     await report('inserting_prompt');fill(prompt,payload.prompt);
@@ -161,7 +162,7 @@
         check();const runs=run();
         const ready=runs.length===1&&enabled(runs[0])&&!elements('[role="progressbar"],mat-progress-spinner',/.*/).length;
         stable=ready?stable+1:0;return stable>=10;
-      },180000);
+      });
     }
     return {url:location.href};
   }
@@ -171,6 +172,7 @@
     if(message.action==='ping'){reply({ready:true,documentId,protocol:3});return;}
     if(busy){reply({error:'An earlier action is still running in this AI Studio tab. Inspect it before resuming.',code:'recovery'});return;}
     busy=true;
+    actionDeadline=message.expiresAt;
     (async()=>{
       if(Date.now()>message.expiresAt)fail('This browser action expired. Nothing was submitted.','recovery',false);
       if(message.action==='snapshot')return readSnapshot();

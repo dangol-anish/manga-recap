@@ -38,3 +38,13 @@ Extension permissions cover only `https://aistudio.google.com/*`, `http://127.0.
 Queues and raw replies remain under ignored `data/browser-narration/`; accepted narration remains under `data/manga/<id>/story-stage5.json`; labeled exports remain under ignored outputs. Older browser profiles and historical jobs are retained. The extension sends only the current exported JPEG batch, bounded to 32 MB total per action. Larger batches pause for the manual workflow. Do not include your browser profile or extension storage when sharing the project.
 
 Tests use isolated chapters, mocked services, a synthetic AI Studio page and an actual unpacked extension in a temporary browser profile. They verify pairing, one-delivery commands, settings, upload and stop protections without real Google requests. The user-started Chapter 1 pilot completed two 20-photo batches on 2026-10-30 after fixing completed-response recognition and the exact `response` string envelope. Batch 1 was recovered from its saved conversation without resubmission; Batch 2 generated and imported automatically without a correction. AI Studio displayed 2m4.9s for Batch 2. Both retained its example response wrapper, which was unwrapped before the unchanged import checks. This establishes one successful live chapter, not reliability across every account, model or future interface. Review **Check story & panels** before audio; JSON validity alone cannot establish factual accuracy. No daily chapter count or uninterrupted operation is promised.
+
+## Waiting for AI Studio
+
+The extension allows up to 10 minutes total for preparing controls, schema and
+photo uploads, and a separate 10 minutes for a generated reply. A slow control
+can use the remaining preparation window instead of failing after 12 seconds.
+Provider errors and uncertain reply states still pause safely. Stop remains
+available; a timeout never automatically repeats a submission or changes saved
+narration. After updating, restart the app, reload the extension on your browser's
+extensions page, refresh its AI Studio tab, then inspect the tab before Resume.
