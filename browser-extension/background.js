@@ -1,6 +1,7 @@
 'use strict';
 const BASE='http://127.0.0.1:8000/api/narration-extension';
 let looping=false;
+let lastRenderWake=0;
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function api(path,body,token){
   const response=await fetch(BASE+path,{method:'POST',headers:{'Content-Type':'application/json','X-Narration-Extension':chrome.runtime.id,...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(body||{}),signal:AbortSignal.timeout(12000)});
@@ -15,6 +16,20 @@ async function chosenTab(){
   if(!tab.url?.startsWith('https://aistudio.google.com/'))throw Error('The selected tab is not ready in AI Studio. Finish signing in yourself, then Resume in the app.');
   return tab;
 }
+async function renderingWindow(tab){
+  // One paired tab in its own window can stay active while Stage 5 is viewed.
+  const {narrationWindowId}=await chrome.storage.local.get('narrationWindowId');
+  if(narrationWindowId!==tab.windowId){
+    const window=await chrome.windows.create({tabId:tab.id,type:'normal',focused:true,state:'maximized'});
+    lastRenderWake=Date.now();
+    await chrome.storage.local.set({narrationWindowId:window.id});
+    tab=await chrome.tabs.get(tab.id);
+  }
+  const window=await chrome.windows.get(tab.windowId);
+  if(window.state!=='maximized')await chrome.windows.update(window.id,{state:'maximized'});
+  if(!tab.active)await chrome.tabs.update(tab.id,{active:true});
+  return tab;
+}
 async function ready(tabId,previousDocument,expiresAt=Date.now()+25000){
   for(let i=0;i<60&&Date.now()<expiresAt;i++){
     try{const value=await chrome.tabs.sendMessage(tabId,{type:'narration-command',action:'ping'});if(value?.ready&&value.documentId!==previousDocument)return value;}catch(_){}
@@ -24,10 +39,12 @@ async function ready(tabId,previousDocument,expiresAt=Date.now()+25000){
 }
 async function execute(command){
   if(!['hello','prepare','snapshot','send','recover'].includes(command.action))throw Error('Unknown narration action.');
-  const tab=await chosenTab();
+  let tab=await chosenTab();
   const token=(await chrome.storage.local.get('token')).token;
   const progress=step=>api('/progress',{id:command.id,step},token);
-  if(command.action==='hello'){const value=await ready(tab.id,undefined,command.expiresAt);return {url:tab.url,protocol:value.protocol};}
+  if(Date.now()>command.expiresAt)throw Error('This browser action expired. Inspect the tab before resuming.');
+  if(command.action==='hello'){const value=await ready(tab.id,undefined,command.expiresAt);return {url:tab.url,protocol:value.protocol,window_visibility:true};}
+  tab=await renderingWindow(tab);
   if(command.action==='recover'||(command.action==='prepare'&&command.payload.fresh)){
     const url=command.action==='recover'?command.payload.url:'https://aistudio.google.com/prompts/new_chat';
     const parsed=new URL(url);
@@ -45,7 +62,20 @@ async function execute(command){
   }else await ready(tab.id,undefined,command.expiresAt);
   if(Date.now()>command.expiresAt)throw Error('This browser action expired. Inspect the tab before resuming.');
   if(command.action==='send'){await progress('submitting');await api('/permit',{id:command.id},token);}
-  return await chrome.tabs.sendMessage(tab.id,{type:'narration-command',action:command.action,payload:command.payload,expiresAt:command.expiresAt,commandId:command.id});
+  const message={type:'narration-command',action:command.action,payload:command.payload,expiresAt:command.expiresAt,commandId:command.id};
+  let value=await chrome.tabs.sendMessage(tab.id,message);
+  const unfocusedPending=value?.focused===false&&!value?.finished&&Date.now()-lastRenderWake>=15000;
+  if(command.action==='snapshot'&&(value?.visible===false||unfocusedPending)){
+    // Some Windows browsers also defer rendering when a window is occluded.
+    // Wake only this paired window; never replay send/prepare or reload the chat.
+    await chrome.windows.update(tab.windowId,{focused:true});
+    lastRenderWake=Date.now();
+    await delay(500);
+    if(Date.now()>command.expiresAt)throw Error('The reply read expired while waking AI Studio. Inspect its tab before resuming.');
+    value=await chrome.tabs.sendMessage(tab.id,message);
+    if(value?.visible===false)return {...value,generating:true,finished:false};
+  }
+  return value;
 }
 async function loop(){
   if(looping)return;looping=true;
@@ -83,7 +113,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
       if(!tab?.url?.startsWith('https://aistudio.google.com/'))throw Error('Open AI Studio and finish signing in first. Then reopen this popup on that tab.');
       const value=await api('/pair',{code:message.code});
-      await chrome.storage.local.set({token:value.token,tabId:tab.id,connectionNote:'Connected to this AI Studio tab.'});
+      await chrome.storage.local.set({token:value.token,tabId:tab.id,narrationWindowId:null,connectionNote:'Connected to this AI Studio tab.'});
       loop();return {ok:true};
     })().then(reply,error=>reply({error:error.message}));return true;
   }

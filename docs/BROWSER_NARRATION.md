@@ -38,3 +38,37 @@ Extension permissions cover only `https://aistudio.google.com/*`, `http://127.0.
 Queues and raw replies remain under ignored `data/browser-narration/`; accepted narration remains under `data/manga/<id>/story-stage5.json`; labeled exports remain under ignored outputs. Older browser profiles and historical jobs are retained. The extension sends only the current exported JPEG batch, bounded to 32 MB total per action. Larger batches pause for the manual workflow. Do not include your browser profile or extension storage when sharing the project.
 
 Tests use isolated chapters, mocked services, a synthetic AI Studio page and an actual unpacked extension in a temporary browser profile. They verify pairing, one-delivery commands, settings, upload and stop protections without real Google requests. The user-started Chapter 1 pilot completed two 20-photo batches on 2026-10-30 after fixing completed-response recognition and the exact `response` string envelope. Batch 1 was recovered from its saved conversation without resubmission; Batch 2 generated and imported automatically without a correction. AI Studio displayed 2m4.9s for Batch 2. Both retained its example response wrapper, which was unwrapped before the unchanged import checks. This establishes one successful live chapter, not reliability across every account, model or future interface. Review **Check story & panels** before audio; JSON validity alone cannot establish factual accuracy. No daily chapter count or uninterrupted operation is promised.
+
+## Waiting for AI Studio
+
+While an explicit queue is running, the extension moves only its paired AI
+Studio tab into a separate maximized browser window and reuses that window. The
+tab stays active there while you view Stage 5 in your original window. Keep the
+AI Studio window open and unminimized. If a reply read reports the page hidden,
+the extension brings only that window forward and reads again after a short
+rendering delay. This never reloads the conversation or repeats a submission.
+An unfinished reply in an unfocused window also gets a rendering wake, at most
+once per 15 seconds, for AI Studio versions that defer updates until focus.
+Hidden replies cannot be accepted as complete. Stopping or finishing a queue
+ends these window checks; the window is left open. No browser-wide performance
+settings or additional extension permissions are changed. Reload extension
+version 0.6.1 after updating; reconnect it if requested by Stage 5. Model checks
+recognize the selected model card and exact model ID in Run settings as well
+as the older model button. Mentions in prompts or model-picker menus do not
+prove that the expected model is selected. Thinking level labels are checked
+without depending on capitalization.
+
+The extension allows up to 10 minutes total for preparing controls, schema and
+photo uploads, and a separate 10 minutes for a generated reply. A slow control
+can use the remaining preparation window instead of failing after 12 seconds.
+Empty text, incomplete JSON and uncertain reply states keep waiting for the full
+response deadline. Completion must belong to the latest model turn, with no
+visible generation or busy indicator, and the complete JSON must remain stable
+across three reads. No empty or incomplete draft is sent to validation or an
+automatic correction. A ten-minute expiry pauses without claiming an empty
+answer. Resuming the same open conversation does not reload it. The updated
+reader uses protocol 4; older installed extensions must be reloaded.
+Provider errors still pause safely. Stop remains
+available; a timeout never automatically repeats a submission or changes saved
+narration. After updating, restart the app, reload the extension on your browser's
+extensions page, refresh its AI Studio tab, then inspect the tab before Resume.

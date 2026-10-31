@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 from app import storage
 from app.studio_browser import Attention, page_problem
-from app.studio_responses import decode_reply, reply_tokens
+from app.studio_responses import decode_reply, reply_tokens, reply_problem, strict_json
 
 router = APIRouter(prefix='/api/narration-extension')
 lock = threading.RLock()
@@ -224,7 +224,7 @@ class ExtensionBrowser:
         from app.browser_narration import cancel
         self.cancel = cancel
         hello = command('hello', cancel=self.cancel)
-        if hello.get('protocol') != 3:
+        if hello.get('protocol') != 4 or hello.get('window_visibility') is not True:
             raise Attention('Update the installed Manga Recap Narration extension using Reload in your browser extensions page, then Resume. The old reply reader will not be used.', 'extension_update')
         return self
 
@@ -234,7 +234,7 @@ class ExtensionBrowser:
 
     def snapshot(self):
         value = command('snapshot', cancel=getattr(self, 'cancel', None))
-        if value.get('protocol') != 3 or type(value.get('finished')) is not bool or type(value.get('generating')) is not bool or not isinstance(value.get('replies'),list):
+        if value.get('protocol') != 4 or type(value.get('finished')) is not bool or type(value.get('generating')) is not bool or not isinstance(value.get('replies'),list):
             raise Attention('The extension returned an unsupported page snapshot. Reload the extension and resume; no request was resent.', 'extension_update')
         if len(value['replies']) > 100 or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) or not isinstance(r.get('text'),str) for r in value['replies']):
             raise Attention('The extension could not identify model replies reliably. Check its AI Studio tab; no response was imported.', 'response_read')
@@ -259,7 +259,7 @@ class ExtensionBrowser:
             beat_schema['properties'].pop('replace_beat', None)
         else:
             beat_schema['required'].append('replace_beat')
-        return command('prepare', {'prompt': prompt, 'photos': files, 'fresh': fresh, 'schema': schema}, cancel, 240).get('url')
+        return command('prepare', {'prompt': prompt, 'photos': files, 'fresh': fresh, 'schema': schema}, cancel, 600).get('url')
 
     def visible_replies(self):
         return reply_tokens(self.snapshot())
@@ -267,11 +267,9 @@ class ExtensionBrowser:
     def send(self):
         return command('send', cancel=getattr(self, 'cancel', None)).get('url', '')
 
-    def receive(self, before, cancel, checkpoint, timeout=1200):
+    def receive(self, before, cancel, checkpoint, timeout=600):
         deadline = time.monotonic() + timeout
         previous, stable = None, 0
-        idle_since = None
-        unknown_since = None
         while time.monotonic() < deadline:
             if cancel.is_set():
                 # Queue stop never closes personal tabs. Remote generation may still finish.
@@ -280,29 +278,31 @@ class ExtensionBrowser:
             checkpoint(value.get('url', ''))
             tokens = reply_tokens(value)
             fresh = [(token,item) for token,item in zip(tokens,value['replies']) if token not in before]
-            if value.get('finished') and not value.get('generating'):
-                unknown_since=None
-                idle_since = idle_since or time.monotonic()
-                if fresh:
-                    token,item = fresh[-1]
+            if value.get('visible') is not False and value.get('finished') and not value.get('generating') and fresh and fresh[-1][0] == tokens[-1]:
+                token,item = fresh[-1]
+                text = decode_reply(item['text'])
+                complete = False
+                if text.strip():
+                    try:
+                        strict_json(text)
+                        complete = True
+                    except ValueError:
+                        problem = reply_problem(text)
+                        complete = bool(problem and problem['kind'] == 'refusal')
+                if complete and item.get('completed') is True:
                     stable = stable+1 if token == previous else 1
                     previous = token
                     if stable >= 3:
                         from app.browser_narration import report_activity
                         report_activity('reading_reply')
                         self.last_capture = {'url':value.get('url','').split('?',1)[0], 'turn_id':item['id'], 'raw':item['text'], 'finished':True}
-                        return decode_reply(item['text'])
-                elif time.monotonic()-idle_since >= 15:
-                    raise Attention('AI Studio appears finished, but no new model reply can be read. The queue is paused instead of waiting or resending. Inspect the saved conversation; use the explicit retry control only after checking the last request.', 'response_read')
-            else:
-                stable=0;previous=None;idle_since=None
-                if value.get('generating'):unknown_since=None
+                        return text
                 else:
-                    unknown_since=unknown_since or time.monotonic()
-                    if time.monotonic()-unknown_since>=120:
-                        raise Attention('AI Studio has shown neither a generation indicator nor a verifiable completed response for two minutes. The queue is paused because its page state is uncertain. Inspect the selected tab before resuming; nothing was resent or imported.', 'response_read')
+                    stable=0;previous=None
+            else:
+                stable=0;previous=None
             cancel.wait(1)
-        raise Attention('AI Studio did not finish a new JSON reply within 20 minutes. Inspect its last request; nothing will be resent automatically.', 'timeout')
+        raise Attention('No complete new JSON reply could be verified within 10 minutes. Gemini may still be generating, or its reply may not be readable yet. Inspect the same AI Studio tab before resuming; nothing was rejected, imported or resent automatically.', 'timeout')
 
     def recover_page(self, url):
         parsed = urlparse(url)
@@ -316,5 +316,9 @@ class ExtensionBrowser:
             current=urlparse(value.get('url',''))
             if current.scheme!='https' or current.hostname!='aistudio.google.com' or not current.path.startswith('/prompts/') or current.query or current.fragment:
                 raise Attention('The paired tab is not showing the unfinished AI Studio conversation. Nothing was resent.', 'recovery')
+            return
+        # Resuming the same visible conversation must not reload an active reply.
+        value=self.snapshot()
+        if value.get('url') == url:
             return
         command('recover', {'url': url}, cancel=getattr(self, 'cancel', None))

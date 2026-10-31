@@ -1,6 +1,7 @@
 """Normal Magi v3 detection; retain only panel labels, never run associations/OCR."""
 import importlib.util
 import os
+import sys
 import signal
 from pathlib import Path
 import time
@@ -11,6 +12,20 @@ from app.storage import ROOT
 MODEL_ID = 'ragavsachdeva/magiv3'
 REVISION = '49c73a225122d53adbaa26d53868be81a57706e2'
 PROMPT = 'Find all panels, texts, characters, and speech-bubble tails in the image.'
+
+
+def cpu_threads():
+    """Use a bounded Windows CPU budget; retain the existing Mac setting."""
+    available = os.cpu_count() or 2
+    default = min(12, max(2, available * 3 // 4)) if sys.platform == 'win32' else 2
+    value = os.environ.get('MAGI_CPU_THREADS', str(default))
+    try:
+        requested = int(value)
+    except ValueError:
+        raise ValueError('MAGI_CPU_THREADS must be a positive whole number.') from None
+    if requested < 1:
+        raise ValueError('MAGI_CPU_THREADS must be a positive whole number.')
+    return min(requested, available)
 
 # All runtime caches belong to this project.
 os.environ['HF_HOME'] = str(ROOT / '.cache' / 'huggingface')
@@ -24,7 +39,7 @@ class Detector:
     def __init__(self):
         import torch
         from transformers import AutoModelForCausalLM, AutoProcessor
-        torch.set_num_threads(2)
+        torch.set_num_threads(cpu_threads())
         self.torch = torch
         # MPS uses shared RAM; use a single half-precision page at a time.
         self.device = 'mps' if torch.backends.mps.is_available() else 'cpu'
@@ -42,7 +57,7 @@ class Detector:
         self.utils = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.utils)
         self.load_seconds = time.perf_counter() - started
-        print(f'Magi v3 {REVISION}, device={self.device}, load={self.load_seconds:.2f}s', flush=True)
+        print(f'Magi v3 {REVISION}, device={self.device}, cpu_threads={torch.get_num_threads()}, load={self.load_seconds:.2f}s', flush=True)
 
     def detect(self, image, direction):
         torch = self.torch

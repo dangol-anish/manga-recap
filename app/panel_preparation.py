@@ -106,6 +106,20 @@ def assets_ready(chapter, record):
     except (KeyError, ValueError): return False
 
 
+def publish_revision(staging, version):
+    """Allow brief Windows file locks; never replace an existing revision."""
+    for attempt in range(8):
+        if version.exists():
+            raise FileExistsError('The panel revision destination already exists; saved work was preserved.')
+        try:
+            os.rename(staging, version)
+            return
+        except PermissionError as exc:
+            if getattr(exc, 'winerror', None) not in (5, 32, 33) or attempt == 7:
+                raise
+            time.sleep(min(.05 * 2**attempt, .5))
+
+
 def generate(chapter, page, pid, boxes, checksum, detection_fingerprint, *, edited=False, zero_panels=False, detection_reasons=None):
     with Image.open(page) as original: image = original.convert('RGB')
     image.info.clear()  # Keep the same pixel coordinate space; do not carry EXIF rotation into assets.
@@ -124,6 +138,7 @@ def generate(chapter, page, pid, boxes, checksum, detection_fingerprint, *, edit
         revision = uuid.uuid4().hex
         staging = Path(tempfile.mkdtemp(prefix='.build-',dir=directory))
         version = directory/revision
+        published = False
         try:
             (staging/'crops').mkdir()
             for panel in panels:
@@ -137,7 +152,8 @@ def generate(chapter, page, pid, boxes, checksum, detection_fingerprint, *, edit
                 labeled.save(staging/'thumbnail.jpg',quality=85)
             finally: labeled.close()
             if source_hash(page) != checksum: raise ValueError('The source image changed while preparing this page. Run Stage 3 again.')
-            os.replace(staging,version)
+            publish_revision(staging,version)
+            published = True
             record = {'schema_version':1,'page':page.name,'page_id':pid,'width':width,'height':height,'reading_direction':chapter['direction'],'revision':revision,'edited':edited,'source_sha256':checksum,'detection_fingerprint':detection_fingerprint,'zero_panels_fallback':fallback,'flagged':bool(reasons),'flag_reasons':reasons,'panels':panels}
             old = safe_record(directory/'page.json')
             if old:
@@ -146,7 +162,7 @@ def generate(chapter, page, pid, boxes, checksum, detection_fingerprint, *, edit
             return record
         except Exception:
             shutil.rmtree(staging,ignore_errors=True)
-            shutil.rmtree(version,ignore_errors=True)
+            if published: shutil.rmtree(version,ignore_errors=True)
             raise
     finally: image.close()
 

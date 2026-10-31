@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Manga Recap Narration",
-  "version": "0.5.2",
+  "version": "0.6.1",
   "minimum_chrome_version": "120",
   "description": "Connect an explicitly selected AI Studio tab to your local Manga Recap narration queue.",
   "permissions": [

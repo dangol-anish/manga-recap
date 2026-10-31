@@ -1,8 +1,8 @@
 /* Visible DOM controls only. No page internals, network interception, login or keys. */
 (() => {
   'use strict';
-  if(globalThis.__mangaNarrationExtension===3)return;
-  globalThis.__mangaNarrationExtension=3;
+  if(globalThis.__mangaNarrationExtension===4)return;
+  globalThis.__mangaNarrationExtension=4;
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const visible=e=>!!(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden';
   const label=e=>{
@@ -13,7 +13,8 @@
   const elements=(selector,name)=>[...document.querySelectorAll(selector)].filter(e=>visible(e)&&(typeof name==='string'?label(e)===name:name.test(label(e))));
   function fail(message,code='settings',retry_safe=true){const error=Error(message);Object.assign(error,{code,retry_safe});throw error;}
   function one(selector,name){const found=elements(selector,name);if(found.length!==1)fail(`Could not identify ${name} in AI Studio. Check Run settings and the selected tab, then Resume.`);return found[0];}
-  async function until(fn,timeout=12000){const end=Date.now()+timeout;while(Date.now()<end){const result=fn();if(result)return result;await wait(200);}fail('An AI Studio control did not become ready. Check the tab before resuming.');}
+  let actionDeadline=Infinity;
+  async function until(fn,timeout=600000){const end=Math.min(Date.now()+timeout,actionDeadline);while(Date.now()<end){check();const result=fn();if(result)return result;await wait(200);}fail('AI Studio controls did not become ready within the 10-minute preparation window. Nothing was submitted. Check the tab before resuming.');}
   function check(){
     // Read provider notices, never quoted story dialogue or the user's prompt.
     const text=platformText();
@@ -77,11 +78,13 @@
     });
   }
   function snapshot(){
-    check();const runs=run();
-    const replies=modelReplies(),generating=!!elements(buttons,/^Stop(?:\s|$)/).length;
-    const terminal=/Response ready\./i.test(document.body.innerText);
-    return {protocol:3,url:location.href,status_text:platformText(),replies,generating,
-      finished:!generating&&(replies.at(-1)?.completed===true||(runs.length===1&&terminal))};
+    check();
+    const replies=modelReplies();
+    const generating=!!elements(buttons,/^(?:Stop|Cancel)(?:\s|$)/i).length||
+      !!elements('[aria-busy="true"],[role="progressbar"],mat-progress-spinner',/.*/).length;
+    // Completion belongs to the latest model turn, never a stale page-wide notice.
+    return {protocol:4,url:location.href,visible:document.visibilityState==='visible',focused:document.hasFocus(),status_text:platformText(),replies,generating,
+      finished:!generating&&replies.at(-1)?.completed===true};
   }
   async function readSnapshot(){
     // Only expand code in the latest model turn with feedback controls.
@@ -94,16 +97,35 @@
     }
     return snapshot();
   }
+  function modelSurface(){
+    // The current model is a non-button card in newer Run settings layouts.
+    for(const heading of elements('h1,h2,h3,h4,[role="heading"],span,div,p',/^Run settings$/i)){
+      for(let root=heading.parentElement;root&&root!==document.body;root=root.parentElement){
+        if(root.querySelector('[aria-label="Enter a prompt"]'))break;
+        const switches=[...root.querySelectorAll('[role="switch"]')];
+        if(switches.some(e=>visible(e)&&/^Structured outputs$/i.test(label(e))))return root;
+      }
+    }
+    // Retain the earlier model-button layout, without matching prompt text.
+    return elements(buttons,/^Gemini\s+3\.8\s+Flash(?:\s|$)/i)[0]||null;
+  }
+  function expectedModel(surface){
+    const nodes=[surface,...surface.querySelectorAll('h1,h2,h3,h4,span,div,p,button,[role="button"]')];
+    return nodes.some(e=>visible(e)&&!e.closest('[role="listbox"],[role="menu"],[role="dialog"]')&&
+      /^(?:Gemini\s+3\.8\s+Flash|gemini-3\.8-flash)$/i.test(label(e).replace(/\s+/g,' ').trim()))||
+      (surface.matches(buttons)&&/^Gemini\s+3\.8\s+Flash(?:\s|$)/i.test(label(surface)));
+  }
   async function configure(outputSchema,report){
     await report('configuring');
     check();
-    if(!elements(buttons,/Gemini 3\.8 Flash/).length)fail('Select Gemini 3.8 Flash in Run settings, then Resume. The app will not silently change models.');
-    const thinking=one('[role="combobox"]','Thinking Level');
+    const model=await until(()=>modelSurface());
+    if(!expectedModel(model))fail('Run settings shows a different model. Select Gemini 3.8 Flash, then Resume. Nothing was submitted.');
+    const thinking=one('[role="combobox"]',/^Thinking level$/i);
     if(!/medium/i.test(thinking.innerText)){
       thinking.click();(await until(()=>elements('[role="option"]','Medium')[0])).click();
       await until(()=>/medium/i.test(thinking.innerText));
     }
-    for(const name of ['Code execution','Function calling','Grounding with Google Search','Grounding with Google Maps','Browse the url context']){
+    for(const name of ['Code execution','Function calling','Grounding with Google Search','Grounding with Google Maps','Browse the url context','URL context']){
       const e=elements('[role="switch"]',name)[0];if(e?.getAttribute('aria-checked')==='true')e.click();
     }
     const structured=one('[role="switch"]','Structured outputs');
@@ -138,7 +160,7 @@
   }
   async function prepare(payload,expiresAt,report){
     check();
-    const prompt=await until(()=>elements('textarea,input,[contenteditable="true"]','Enter a prompt')[0],30000);
+    const prompt=await until(()=>elements('textarea,input,[contenteditable="true"]','Enter a prompt')[0]);
     await configure(payload.schema,report);
     if(Date.now()>expiresAt)fail('Preparing this batch expired. Nothing was submitted.');
     await report('inserting_prompt');fill(prompt,payload.prompt);
@@ -161,16 +183,17 @@
         check();const runs=run();
         const ready=runs.length===1&&enabled(runs[0])&&!elements('[role="progressbar"],mat-progress-spinner',/.*/).length;
         stable=ready?stable+1:0;return stable>=10;
-      },180000);
+      });
     }
     return {url:location.href};
   }
   let busy=false;
   chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     if(sender.id!==chrome.runtime.id||message.type!=='narration-command')return;
-    if(message.action==='ping'){reply({ready:true,documentId,protocol:3});return;}
+    if(message.action==='ping'){reply({ready:true,documentId,protocol:4});return;}
     if(busy){reply({error:'An earlier action is still running in this AI Studio tab. Inspect it before resuming.',code:'recovery'});return;}
     busy=true;
+    actionDeadline=message.expiresAt;
     (async()=>{
       if(Date.now()>message.expiresAt)fail('This browser action expired. Nothing was submitted.','recovery',false);
       if(message.action==='snapshot')return readSnapshot();
